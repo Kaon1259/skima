@@ -1,0 +1,48 @@
+# --- Node / Expo (client) ---
+node_modules/
+.expo/
+.expo-shared/
+dist/
+web-build/
+*.tsbuildinfo
+
+# --- Java / Maven (server) ---
+target/
+build/
+*.class
+*.jar
+*.war
+.mvn/wrapper/maven-wrapper.jar
+hs_err_pid*
+
+# --- IDE / Editor ---
+.idea/
+.vscode/
+*.iml
+*.swp
+*.swo
+
+# --- OS ---
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# --- Logs ---
+*.log
+logs/
+
+# --- Local secrets / env ---
+.env
+.env.*
+!.env.example
+application-local.yml
+application-local.yaml
+application-local.properties
+application-secret.yml
+
+# --- Claude / agent local state ---
+.claude/
+
+# --- Misc ---
+*.bak
+*.tmp
