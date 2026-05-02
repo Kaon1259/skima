@@ -15,7 +15,8 @@ import { router, useFocusEffect } from 'expo-router';
 import { Icon } from '@/components/Icon';
 import { blurFocusedForModal } from '@/components/RatingModal';
 import { api, ApiError } from '@/lib/api';
-import { Brand, Cafe, CafeType, CAFE_TYPE_LABEL } from '@/lib/types';
+import { getCurrentCoords } from '@/lib/geolocation';
+import { Brand, Cafe, CafeStats, CafeType, CAFE_TYPE_LABEL, fmtPercent } from '@/lib/types';
 import { colors, radius, spacing, styles } from '@/lib/theme';
 
 type Mode = 'create' | 'edit';
@@ -29,6 +30,8 @@ const TYPE_OPTIONS: { key: CafeType; label: string; emoji: string }[] = [
 
 export default function OwnerCafesScreen() {
   const [cafes, setCafes] = useState<Cafe[]>([]);
+  const [stats, setStats] = useState<Record<number, CafeStats>>({});
+  const [q, setQ] = useState('');
   const [refreshing, setRefreshing] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
   const [mode, setMode] = useState<Mode>('create');
@@ -38,19 +41,37 @@ export default function OwnerCafesScreen() {
   const [brand, setBrand] = useState<Brand | null>(null);
   const [name, setName] = useState('');
   const [address, setAddress] = useState('');
+  const [latitude, setLatitude] = useState<number | null>(null);
+  const [longitude, setLongitude] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
 
   const load = useCallback(async () => {
     setRefreshing(true);
     try {
-      const data = await api<Cafe[]>('/api/owner/cafes');
+      const [data, statsArr] = await Promise.all([
+        api<Cafe[]>('/api/owner/cafes'),
+        api<CafeStats[]>('/api/owner/dashboard/by-cafe').catch(() => [] as CafeStats[]),
+      ]);
       setCafes(data);
+      const m: Record<number, CafeStats> = {};
+      statsArr.forEach((s) => { m[s.cafeId] = s; });
+      setStats(m);
     } catch (e) {
       notify((e as Error).message);
     } finally {
       setRefreshing(false);
     }
   }, []);
+
+  const filteredCafes = useMemo(() => {
+    const trimmed = q.trim().toLowerCase();
+    if (!trimmed) return cafes;
+    return cafes.filter((c) =>
+      c.name.toLowerCase().includes(trimmed)
+      || (c.address ?? '').toLowerCase().includes(trimmed)
+      || (c.brandName ?? '').toLowerCase().includes(trimmed),
+    );
+  }, [cafes, q]);
 
   useFocusEffect(useCallback(() => {
     load();
@@ -66,6 +87,8 @@ export default function OwnerCafesScreen() {
     setBrand(null);
     setName('');
     setAddress('');
+    setLatitude(null);
+    setLongitude(null);
   }
 
   function openCreate() {
@@ -94,6 +117,8 @@ export default function OwnerCafesScreen() {
     );
     setName(cafe.name);
     setAddress(cafe.address);
+    setLatitude(cafe.latitude ?? null);
+    setLongitude(cafe.longitude ?? null);
     blurFocusedForModal();
     setModalOpen(true);
   }
@@ -119,6 +144,8 @@ export default function OwnerCafesScreen() {
         address: address.trim(),
         cafeType,
         brandKey: isFranchise ? brand!.key : null,
+        latitude,
+        longitude,
       };
       if (mode === 'edit' && editId != null) {
         await api(`/api/owner/cafes/${editId}`, { method: 'PUT', body: payload });
@@ -161,7 +188,7 @@ export default function OwnerCafesScreen() {
       <FlatList
         contentContainerStyle={{ padding: spacing.lg, paddingBottom: 110 }}
         showsVerticalScrollIndicator={false}
-        data={cafes}
+        data={filteredCafes}
         keyExtractor={(c) => String(c.id)}
         ListHeaderComponent={
           <View style={{ marginBottom: spacing.lg }}>
@@ -169,6 +196,22 @@ export default function OwnerCafesScreen() {
             <Text style={[styles.subtitle, { marginTop: 4 }]}>
               프렌차이즈 / 개인 / 베이커리 — 4종류 매장 등록 가능
             </Text>
+            {cafes.length > 0 ? (
+              <View style={{ marginTop: 12 }}>
+                <TextInput
+                  style={[styles.input, { marginBottom: 0 }]}
+                  value={q}
+                  onChangeText={setQ}
+                  placeholder="매장명·주소·브랜드 검색"
+                  placeholderTextColor={colors.textLight}
+                />
+                {q.trim() ? (
+                  <Text style={{ fontSize: 11, color: colors.textMuted, marginTop: 4 }}>
+                    {filteredCafes.length}건 일치 (전체 {cafes.length}건 중)
+                  </Text>
+                ) : null}
+              </View>
+            ) : null}
           </View>
         }
         ListEmptyComponent={
@@ -207,6 +250,8 @@ export default function OwnerCafesScreen() {
               </View>
               <Icon name="chevron-forward" size={18} color={colors.textLight} />
             </View>
+
+            <CafeMiniStats stats={stats[item.id]} />
 
             <View style={{ flexDirection: 'row', gap: 8, marginTop: 12 }}>
               <Pressable
@@ -295,6 +340,10 @@ export default function OwnerCafesScreen() {
               setName={setName}
               address={address}
               setAddress={setAddress}
+              latitude={latitude}
+              longitude={longitude}
+              setLatitude={setLatitude}
+              setLongitude={setLongitude}
               busy={busy}
               onCancel={() => setModalOpen(false)}
               onSubmit={submit}
@@ -302,6 +351,73 @@ export default function OwnerCafesScreen() {
           </View>
         </View>
       </Modal>
+    </View>
+  );
+}
+
+function CafeMiniStats({ stats }: { stats?: CafeStats }) {
+  if (!stats) return null;
+  const noShowRate = stats.noShowRate ?? 0;
+  const noShowPct = Math.min(noShowRate * 100, 100);
+  return (
+    <View
+      style={{
+        marginTop: 12,
+        padding: 10,
+        borderRadius: radius.md,
+        backgroundColor: colors.surfaceAlt,
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 12,
+      }}
+    >
+      <View style={{ alignItems: 'center', minWidth: 60 }}>
+        <Text style={{ fontSize: 16, fontWeight: '900', color: colors.primary }}>
+          {stats.monthCompletedMatches ?? 0}
+        </Text>
+        <Text style={{ fontSize: 10, color: colors.textMuted, marginTop: 2 }}>이번달 매칭</Text>
+      </View>
+      <View style={{ width: 1, height: 32, backgroundColor: colors.border }} />
+      <View style={{ alignItems: 'center', minWidth: 50 }}>
+        <Text style={{ fontSize: 14, fontWeight: '900', color: colors.warn }}>
+          {stats.avgRating != null ? `★ ${stats.avgRating.toFixed(1)}` : '★ —'}
+        </Text>
+        <Text style={{ fontSize: 10, color: colors.textMuted, marginTop: 2 }}>
+          평점 ({stats.ratingsCount ?? 0})
+        </Text>
+      </View>
+      <View style={{ width: 1, height: 32, backgroundColor: colors.border }} />
+      <View style={{ flex: 1 }}>
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline' }}>
+          <Text style={{ fontSize: 10, color: colors.textMuted }}>노쇼율</Text>
+          <Text
+            style={{
+              fontSize: 11,
+              fontWeight: '800',
+              color: noShowRate > 0 ? colors.danger : colors.success,
+            }}
+          >
+            {fmtPercent(noShowRate)}
+          </Text>
+        </View>
+        <View
+          style={{
+            marginTop: 4,
+            height: 6,
+            borderRadius: 3,
+            backgroundColor: colors.surfaceMuted,
+            overflow: 'hidden',
+          }}
+        >
+          <View
+            style={{
+              width: `${noShowPct}%`,
+              height: '100%',
+              backgroundColor: noShowRate > 0 ? colors.danger : colors.success,
+            }}
+          />
+        </View>
+      </View>
     </View>
   );
 }
@@ -333,6 +449,10 @@ function RegisterForm({
   setName,
   address,
   setAddress,
+  latitude,
+  longitude,
+  setLatitude,
+  setLongitude,
   busy,
   onCancel,
   onSubmit,
@@ -346,10 +466,29 @@ function RegisterForm({
   setName: (s: string) => void;
   address: string;
   setAddress: (s: string) => void;
+  latitude: number | null;
+  longitude: number | null;
+  setLatitude: (n: number | null) => void;
+  setLongitude: (n: number | null) => void;
   busy: boolean;
   onCancel: () => void;
   onSubmit: () => void;
 }) {
+  const [busyLoc, setBusyLoc] = useState(false);
+  const fillCurrentLocation = async () => {
+    setBusyLoc(true);
+    try {
+      const c = await getCurrentCoords();
+      setLatitude(c.latitude);
+      setLongitude(c.longitude);
+    } catch (e) {
+      const msg = (e as Error).message || '위치 가져오기 실패';
+      if (Platform.OS === 'web') window.alert(msg);
+      else Alert.alert('위치 오류', msg);
+    } finally {
+      setBusyLoc(false);
+    }
+  };
   const isFranchise = cafeType === 'FRANCHISE_CAFE' || cafeType === 'FRANCHISE_BAKERY';
   const [pickerOpen, setPickerOpen] = useState(false);
 
@@ -472,6 +611,68 @@ function RegisterForm({
         placeholder="예: 서울 서초구 양재대로 123"
         placeholderTextColor={colors.textLight}
       />
+
+      <Text style={[styles.subtitle, { marginBottom: 8, fontWeight: '700' }]}>
+        {isFranchise ? '5. 매장 좌표 (GPS 출근 게이트)' : '4. 매장 좌표 (GPS 출근 게이트)'}
+      </Text>
+      <View
+        style={{
+          padding: 12,
+          borderRadius: radius.md,
+          backgroundColor: colors.surfaceAlt,
+          borderWidth: 1,
+          borderColor: colors.border,
+          marginBottom: 16,
+        }}
+      >
+        {latitude != null && longitude != null ? (
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            <Text style={{ fontSize: 16 }}>📍</Text>
+            <View style={{ flex: 1 }}>
+              <Text style={{ fontSize: 12, fontWeight: '700', color: colors.text }}>
+                {latitude.toFixed(6)}, {longitude.toFixed(6)}
+              </Text>
+              <Text style={{ fontSize: 10, color: colors.textMuted, marginTop: 2 }}>
+                워커가 이 매장 반경 100m 안에서만 출근 체크인 가능
+              </Text>
+            </View>
+            <Pressable
+              onPress={() => {
+                setLatitude(null);
+                setLongitude(null);
+              }}
+              hitSlop={8}
+            >
+              <Text style={{ fontSize: 18, color: colors.textMuted, paddingHorizontal: 4 }}>×</Text>
+            </Pressable>
+          </View>
+        ) : (
+          <View>
+            <Text style={{ fontSize: 11, color: colors.textMuted, marginBottom: 8 }}>
+              좌표 미입력 시 GPS 게이트가 적용되지 않습니다 (어디서나 체크인 가능)
+            </Text>
+            <Pressable
+              onPress={fillCurrentLocation}
+              disabled={busyLoc}
+              style={({ pressed }) => [
+                {
+                  paddingVertical: 10,
+                  paddingHorizontal: 14,
+                  borderRadius: radius.md,
+                  backgroundColor: colors.primary,
+                  alignItems: 'center',
+                  opacity: busyLoc ? 0.7 : 1,
+                },
+                pressed && { opacity: 0.85 },
+              ]}
+            >
+              <Text style={{ fontSize: 12, fontWeight: '800', color: '#fff' }}>
+                {busyLoc ? '위치 가져오는 중...' : '📍 현재 위치로 채우기'}
+              </Text>
+            </Pressable>
+          </View>
+        )}
+      </View>
 
       <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>
         <Pressable

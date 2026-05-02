@@ -44,12 +44,28 @@ public class ShiftMatch {
     @Column(nullable = false, length = 16)
     private MatchStatus status;
 
+    /** 점주가 마지막으로 채팅을 본 시각 — 이후 워커 메시지를 unread 로 카운트 */
+    @Column(name = "owner_chat_seen_at")
+    private LocalDateTime ownerChatSeenAt;
+
+    /** 워커가 마지막으로 채팅을 본 시각 — 이후 점주 메시지를 unread 로 카운트 */
+    @Column(name = "worker_chat_seen_at")
+    private LocalDateTime workerChatSeenAt;
+
     @Builder
     public ShiftMatch(Shift shift, User worker) {
         this.shift = shift;
         this.worker = worker;
         this.status = MatchStatus.MATCHED;
         this.matchedAt = LocalDateTime.now();
+    }
+
+    public void markOwnerChatSeen(LocalDateTime at) {
+        this.ownerChatSeenAt = at;
+    }
+
+    public void markWorkerChatSeen(LocalDateTime at) {
+        this.workerChatSeenAt = at;
     }
 
     public void checkIn(LocalDateTime at) {

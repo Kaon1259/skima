@@ -1,11 +1,15 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Alert, FlatList, Platform, Pressable, RefreshControl, Text, View } from 'react-native';
-import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 
 import { ChatSheet } from '@/components/ChatSheet';
 import { Icon } from '@/components/Icon';
 import { RatingModal, blurFocusedForModal } from '@/components/RatingModal';
+import ShiftSkillBadges from '@/components/ShiftSkillBadges';
+import SkillMatchSummary from '@/components/SkillMatchSummary';
 import { api } from '@/lib/api';
+import { useFocusPolling } from '@/lib/useFocusPolling';
+import { useToast } from '@/lib/toast';
 import {
   OwnerShift,
   ShiftApplication,
@@ -18,6 +22,7 @@ import { colors, radius, spacing, statusVisual, styles } from '@/lib/theme';
 export default function ShiftApplicantsScreen() {
   const { id, action } = useLocalSearchParams<{ id: string; action?: string }>();
   const shiftId = id;
+  const toast = useToast();
   const [shift, setShift] = useState<OwnerShift | null>(null);
   const [apps, setApps] = useState<ShiftApplication[]>([]);
   const [refreshing, setRefreshing] = useState(false);
@@ -51,9 +56,7 @@ export default function ShiftApplicantsScreen() {
     }
   }, [shiftId]);
 
-  useFocusEffect(useCallback(() => {
-    load();
-  }, [load]));
+  useFocusPolling(load, 10000);
 
   // 알림에서 ?action=approve 로 진입 시 정산 승인 모달 자동 오픈
   useEffect(() => {
@@ -116,16 +119,41 @@ export default function ShiftApplicantsScreen() {
     if (!ok) return;
     setBusyNoShow(true);
     try {
-      const r = await api<{ backupMatched: boolean; shiftReopened: boolean }>(
+      const r = await api<{
+        backupMatched: boolean;
+        shiftReopened: boolean;
+        backupWorkerName: string | null;
+        backupMatchId: number | null;
+        favoritingWorkerCount: number;
+      }>(
         `/api/owner/matches/${matchId}/no-show`,
         { method: 'POST' },
       );
-      const msg = r.backupMatched
-        ? '노쇼 등록 + 백업 워커 자동 매칭 완료'
-        : r.shiftReopened
-        ? '노쇼 등록 + 시프트 재모집 시작'
-        : '노쇼 등록 완료';
-      notify(msg);
+      if (r.backupMatched) {
+        toast.push({
+          title: `✅ 백업 워커 자동 매칭 — ${r.backupWorkerName ?? '워커'}`,
+          subtitle: '대기 지원자 중 가장 먼저 지원한 워커가 시프트를 이어받습니다',
+          severity: 'success',
+          ttl: 6500,
+        });
+      } else if (r.shiftReopened) {
+        const sub = r.favoritingWorkerCount > 0
+          ? `백업 후보가 없어 시프트가 OPEN 으로 재모집됐어요. 단골 ${r.favoritingWorkerCount}명이 알림을 받습니다`
+          : '백업 후보가 없어 시프트가 OPEN 으로 재모집됐어요. 새 지원자가 들어올 때까지 대기';
+        toast.push({
+          title: '🔄 시프트 재모집 시작',
+          subtitle: sub,
+          severity: 'warn',
+          ttl: 7000,
+        });
+      } else {
+        toast.push({
+          title: '노쇼 등록 완료',
+          subtitle: '★1 평가 자동 등록 + 워커 알림 발송',
+          severity: 'info',
+          ttl: 5000,
+        });
+      }
       load();
     } catch (e) {
       notify((e as Error).message);
@@ -233,6 +261,16 @@ export default function ShiftApplicantsScreen() {
                 <Text style={[styles.badgeText, { color: v.fg }]}>{v.label}</Text>
               </View>
             </Pressable>
+
+            {/* 능력 매칭 요약 — 시프트 요구 vs 워커 자기신고 */}
+            <SkillMatchSummary
+              shiftJobRole={shift?.jobRole}
+              shiftMinSkill={shift?.minSkill}
+              shiftRequirements={shift?.requirements}
+              workerLevel={item.workerLevel}
+              workerRoles={item.workerRoles}
+              workerCertifications={item.workerCertifications}
+            />
 
             {/* 워커 통계 미리보기 */}
             {stats ? (
@@ -384,11 +422,17 @@ function ShiftTimeline({
           <Text style={[styles.badgeText, { color: v.fg }]}>{v.label}</Text>
         </View>
       </View>
-      <Text style={[styles.bodyMuted, { marginBottom: 12 }]}>
+      <Text style={[styles.bodyMuted, { marginBottom: 4 }]}>
         {fmtDateTime(shift.startAt)} ~ {fmtDateTime(shift.endAt)}
       </Text>
+      <ShiftSkillBadges
+        jobRole={shift.jobRole}
+        minSkill={shift.minSkill}
+        requirements={shift.requirements}
+        compact
+      />
 
-      <View style={{ paddingTop: 8, borderTopWidth: 1, borderTopColor: colors.border }}>
+      <View style={{ paddingTop: 12, marginTop: 8, borderTopWidth: 1, borderTopColor: colors.border }}>
         {stages.map((s, i) => (
           <View key={i} style={{ flexDirection: 'row', alignItems: 'center', marginTop: 8 }}>
             <View
@@ -471,6 +515,23 @@ function ShiftTimeline({
           >
             <Text style={{ fontSize: 13 }}>💬</Text>
             <Text style={{ fontSize: 12, fontWeight: '700', color: colors.text }}>워커 채팅</Text>
+            {shift.chatUnreadCount && shift.chatUnreadCount > 0 ? (
+              <View
+                style={{
+                  marginLeft: 2,
+                  paddingHorizontal: 6,
+                  paddingVertical: 1,
+                  borderRadius: radius.pill,
+                  backgroundColor: colors.danger,
+                  minWidth: 18,
+                  alignItems: 'center',
+                }}
+              >
+                <Text style={{ fontSize: 10, fontWeight: '900', color: '#fff' }}>
+                  {shift.chatUnreadCount > 99 ? '99+' : shift.chatUnreadCount}
+                </Text>
+              </View>
+            ) : null}
           </Pressable>
           <Pressable
             style={[styles.buttonSecondary, { flex: 1, minWidth: 110, paddingVertical: 8, flexDirection: 'row', gap: 4 }]}

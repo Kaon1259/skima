@@ -66,6 +66,8 @@ export function ChatSheet({ visible, matchId, title, onClose }: Props) {
       return;
     }
     load();
+    // 채팅 열면 본 시각 갱신 (점주/워커 자동 분기)
+    api(`/api/matches/${matchId}/messages/seen`, { method: 'POST' }).catch(() => {});
     timerRef.current = setInterval(load, POLL_MS);
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);

@@ -36,6 +36,7 @@ public class NotificationService {
     private final RatingRepository ratingRepository;
     private final PayoutRepository payoutRepository;
     private final UserRepository userRepository;
+    private final io.skima.byteapp.repository.WorkerFavoriteCafeRepository workerFavRepository;
 
     @Transactional(readOnly = true)
     public List<NotificationItem> forOwner(User owner) {
@@ -285,6 +286,33 @@ public class NotificationService {
                     r.getMatch().getId(),
                     r.getCreatedAt(),
                     r.getScore() >= 4 ? "success" : "warn"));
+        }
+
+        // 5) 즐겨찾기 매장 새 시프트 (최근 24h, OPEN 상태) — Phase 3 리텐션
+        List<Long> favCafeIds = workerFavRepository
+                .findAllByWorkerIdOrderByCreatedAtDesc(worker.getId()).stream()
+                .map(f -> f.getCafe().getId())
+                .toList();
+        if (!favCafeIds.isEmpty()) {
+            LocalDateTime dayAgoForFav = now.minusDays(1);
+            for (Shift s : shiftRepository.findAll()) {
+                if (s.getStatus() != io.skima.byteapp.domain.ShiftStatus.OPEN) continue;
+                if (s.getCreatedAt() == null || s.getCreatedAt().isBefore(dayAgoForFav)) continue;
+                if (!favCafeIds.contains(s.getCafe().getId())) continue;
+                // 이미 본인이 지원했거나 매칭된 시프트는 노출 안 함
+                boolean alreadyApplied = myApps.stream()
+                        .anyMatch(a -> a.getShift().getId().equals(s.getId())
+                                && a.getStatus() != ApplicationStatus.WITHDRAWN);
+                if (alreadyApplied) continue;
+                raws.add(new Raw(
+                        "FAVORITE_CAFE_NEW_SHIFT",
+                        "★ " + s.getCafe().getName() + " 새 시프트",
+                        fmtTime(s.getStartAt()) + " 시작 · 시급 ₩" + String.format("%,d", s.getHourlyWage()),
+                        "/cafe/" + s.getCafe().getId(),
+                        s.getId(),
+                        s.getCreatedAt(),
+                        "success"));
+            }
         }
 
         // 4) 정산 완료 (최근 7일)

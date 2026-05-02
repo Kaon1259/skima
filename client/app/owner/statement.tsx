@@ -118,7 +118,7 @@ export default function MonthlyStatementScreen() {
         <View style={styles.card}>
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
             <Pressable
-              style={({ pressed }) => [{ flex: 1 }, pressed && item.workerId && { opacity: 0.7 }]}
+              style={({ pressed }) => [{ flex: 1 }, pressed && item.workerId ? { opacity: 0.7 } : null]}
               onPress={() => item.workerId && router.push(`/u/${item.workerId}` as never)}
               disabled={!item.workerId}
             >

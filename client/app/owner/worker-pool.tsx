@@ -7,9 +7,10 @@ import { api } from '@/lib/api';
 import { WorkerPoolEntry, fmtDateTime, fmtPercent } from '@/lib/types';
 import { colors, radius, spacing, styles } from '@/lib/theme';
 
-type Sort = 'recent' | 'rating' | 'rehire' | 'most-used' | 'no-show';
+type Sort = 'favorites' | 'recent' | 'rating' | 'rehire' | 'most-used' | 'no-show';
 
 const SORT_LABEL: Record<Sort, string> = {
+  favorites: '⭐ 단골',
   recent: '최근 매칭순',
   rating: '★ 높은순',
   rehire: '재고용 의향순',
@@ -19,15 +20,20 @@ const SORT_LABEL: Record<Sort, string> = {
 
 export default function WorkerPoolScreen() {
   const [pool, setPool] = useState<WorkerPoolEntry[]>([]);
+  const [favoriteIds, setFavoriteIds] = useState<Set<number>>(new Set());
   const [refreshing, setRefreshing] = useState(false);
-  const [sort, setSort] = useState<Sort>('recent');
+  const [sort, setSort] = useState<Sort>('favorites');
   const [query, setQuery] = useState('');
 
   const load = useCallback(async () => {
     setRefreshing(true);
     try {
-      const data = await api<WorkerPoolEntry[]>('/api/owner/worker-pool');
+      const [data, favs] = await Promise.all([
+        api<WorkerPoolEntry[]>('/api/owner/worker-pool'),
+        api<number[]>('/api/owner/favorites/workers').catch(() => [] as number[]),
+      ]);
       setPool(data);
+      setFavoriteIds(new Set(favs));
     } catch (e) {
       const msg = (e as Error).message;
       Platform.OS === 'web' ? window.alert(msg) : Alert.alert('오류', msg);
@@ -35,6 +41,30 @@ export default function WorkerPoolScreen() {
       setRefreshing(false);
     }
   }, []);
+
+  async function toggleFavorite(workerId: number) {
+    const was = favoriteIds.has(workerId);
+    // optimistic
+    setFavoriteIds((prev) => {
+      const next = new Set(prev);
+      if (was) next.delete(workerId);
+      else next.add(workerId);
+      return next;
+    });
+    try {
+      await api(`/api/owner/favorites/workers/${workerId}`, {
+        method: was ? 'DELETE' : 'POST',
+      });
+    } catch (e) {
+      // 롤백
+      setFavoriteIds((prev) => {
+        const next = new Set(prev);
+        if (was) next.add(workerId);
+        else next.delete(workerId);
+        return next;
+      });
+    }
+  }
 
   useFocusEffect(useCallback(() => {
     load();
@@ -48,6 +78,14 @@ export default function WorkerPoolScreen() {
     });
     const arr = [...filtered];
     switch (sort) {
+      case 'favorites':
+        arr.sort((a, b) => {
+          const fa = favoriteIds.has(a.workerId) ? 1 : 0;
+          const fb = favoriteIds.has(b.workerId) ? 1 : 0;
+          if (fa !== fb) return fb - fa;
+          return (b.lastMatchAt ?? '').localeCompare(a.lastMatchAt ?? '');
+        });
+        break;
       case 'rating':
         arr.sort((a, b) => (b.avgRatingByOwner ?? -1) - (a.avgRatingByOwner ?? -1));
         break;
@@ -67,7 +105,7 @@ export default function WorkerPoolScreen() {
         );
     }
     return arr;
-  }, [pool, sort, query]);
+  }, [pool, sort, query, favoriteIds]);
 
   // 헤더 통계
   const totals = useMemo(() => {
@@ -151,7 +189,13 @@ export default function WorkerPoolScreen() {
           </Text>
         </View>
       }
-      renderItem={({ item }) => <WorkerCard entry={item} />}
+      renderItem={({ item }) => (
+        <WorkerCard
+          entry={item}
+          isFavorite={favoriteIds.has(item.workerId)}
+          onToggleFavorite={() => toggleFavorite(item.workerId)}
+        />
+      )}
     />
   );
 }
@@ -178,16 +222,32 @@ function Stat({ label, value, color, sub }: { label: string; value: number; colo
   );
 }
 
-function WorkerCard({ entry: w }: { entry: WorkerPoolEntry }) {
+function WorkerCard({
+  entry: w,
+  isFavorite,
+  onToggleFavorite,
+}: {
+  entry: WorkerPoolEntry;
+  isFavorite: boolean;
+  onToggleFavorite: () => void;
+}) {
   const tone = w.noShowCount > 0
     ? 'negative'
+    : isFavorite
+    ? 'favorite'
     : (w.avgRatingByOwner ?? 0) >= 4
     ? 'positive'
     : 'neutral';
   const borderColor =
-    tone === 'positive' ? colors.success : tone === 'negative' ? colors.danger : colors.border;
+    tone === 'positive' ? colors.success
+    : tone === 'negative' ? colors.danger
+    : tone === 'favorite' ? colors.warn
+    : colors.border;
   const bg =
-    tone === 'positive' ? colors.successSoft : tone === 'negative' ? colors.dangerSoft : colors.surfaceAlt;
+    tone === 'positive' ? colors.successSoft
+    : tone === 'negative' ? colors.dangerSoft
+    : tone === 'favorite' ? colors.warnSoft
+    : colors.surfaceAlt;
 
   return (
     <Pressable
@@ -216,6 +276,18 @@ function WorkerCard({ entry: w }: { entry: WorkerPoolEntry }) {
         <View style={{ flex: 1 }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
             <Text style={styles.title}>{w.workerName}</Text>
+            {isFavorite ? (
+              <View
+                style={{
+                  paddingHorizontal: 6,
+                  paddingVertical: 2,
+                  borderRadius: radius.pill,
+                  backgroundColor: colors.warnSoft,
+                }}
+              >
+                <Text style={{ fontSize: 10, fontWeight: '900', color: colors.warn }}>⭐ 단골</Text>
+              </View>
+            ) : null}
             {w.totalMatches >= 2 ? (
               <View
                 style={{
@@ -251,7 +323,18 @@ function WorkerCard({ entry: w }: { entry: WorkerPoolEntry }) {
             </Text>
           ) : null}
         </View>
-        <Icon name="chevron-forward" size={16} color={colors.textLight} />
+        <Pressable
+          onPress={(e) => {
+            e.stopPropagation();
+            onToggleFavorite();
+          }}
+          hitSlop={10}
+          style={({ pressed }) => [
+            { padding: 6, opacity: pressed ? 0.6 : 1 },
+          ]}
+        >
+          <Text style={{ fontSize: 24 }}>{isFavorite ? '⭐' : '☆'}</Text>
+        </Pressable>
       </View>
 
       {/* 통계 */}

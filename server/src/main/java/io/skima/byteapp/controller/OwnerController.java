@@ -79,6 +79,8 @@ public class OwnerController {
     private final PayoutService payoutService;
     private final NoShowService noShowService;
     private final WorkerPoolService workerPoolService;
+    private final io.skima.byteapp.repository.ChatMessageRepository chatRepository;
+    private final io.skima.byteapp.service.FavoriteService favoriteService;
 
     /* ========= 매장 ========= */
 
@@ -102,6 +104,8 @@ public class OwnerController {
                 .address(req.address())
                 .cafeType(req.cafeType())
                 .brandKey(req.brandKey())
+                .latitude(req.latitude())
+                .longitude(req.longitude())
                 .build());
         return CafeResponse.from(saved, brandCatalog.findByKey(saved.getBrandKey()).orElse(null));
     }
@@ -114,6 +118,9 @@ public class OwnerController {
         Cafe cafe = mustOwnCafe(principal, cafeId);
         validateBrand(req);
         cafe.update(req.name(), req.address(), req.cafeType(), req.brandKey());
+        if (req.latitude() != null || req.longitude() != null) {
+            cafe.updateLocation(req.latitude(), req.longitude());
+        }
         return CafeResponse.from(cafe, brandCatalog.findByKey(cafe.getBrandKey()).orElse(null));
     }
 
@@ -179,6 +186,7 @@ public class OwnerController {
                     java.time.LocalDateTime payoutApprovedAt = null;
                     Boolean payoutAutoApproved = null;
                     java.time.LocalDateTime payoutCompletedAt = null;
+                    long chatUnread = 0;
 
                     var matchOpt = matchRepository.findActiveByShiftId(s.getId());
                     if (matchOpt.isPresent()) {
@@ -202,12 +210,19 @@ public class OwnerController {
                             payoutAutoApproved = po.isAutoApproved();
                             payoutCompletedAt = po.getCompletedAt();
                         }
+                        // 점주가 안 본 워커 메시지 수
+                        var seen = m.getOwnerChatSeenAt();
+                        chatUnread = seen == null
+                                ? chatRepository.countByMatchIdAndSenderRole(m.getId(), UserRole.WORKER)
+                                : chatRepository.countByMatchIdAndSenderRoleAndCreatedAtAfter(
+                                        m.getId(), UserRole.WORKER, seen);
                     }
 
                     return OwnerShiftView.from(s, total, pending,
                             matchId, matchedWorkerName, matchStatus,
                             ratingScore, willRehire, workerRatedOwner,
-                            payoutStatus, payoutApprovedAt, payoutAutoApproved, payoutCompletedAt);
+                            payoutStatus, payoutApprovedAt, payoutAutoApproved, payoutCompletedAt,
+                            chatUnread);
                 })
                 .toList();
     }
@@ -426,5 +441,37 @@ public class OwnerController {
             throw BusinessException.forbidden("본인 소유 매장이 아닙니다");
         }
         return cafe;
+    }
+
+    /** 워커 N명이 이 매장을 단골로 등록했는지 — 시프트 등록 시 알림 발송 안내용 */
+    @GetMapping("/cafes/{cafeId}/favoriting-count")
+    public Map<String, Long> favoritingCount(@AuthenticationPrincipal AuthUser principal,
+                                              @PathVariable Long cafeId) {
+        mustOwnCafe(principal, cafeId);
+        long count = favoriteService.workerIdsFavoriting(cafeId).size();
+        Map<String, Long> result = new HashMap<>();
+        result.put("count", count);
+        return result;
+    }
+
+    /* ========= 단골 워커 (Phase 3 리텐션) ========= */
+
+    @GetMapping("/favorites/workers")
+    public List<Long> myFavoriteWorkerIds(@AuthenticationPrincipal AuthUser principal) {
+        return favoriteService.ownerFavoriteWorkerIds(principal.getDomainUser());
+    }
+
+    @PostMapping("/favorites/workers/{workerId}")
+    public ResponseEntity<Void> addFavoriteWorker(@AuthenticationPrincipal AuthUser principal,
+                                                   @PathVariable Long workerId) {
+        favoriteService.addOwnerFavorite(principal.getDomainUser(), workerId);
+        return ResponseEntity.noContent().build();
+    }
+
+    @DeleteMapping("/favorites/workers/{workerId}")
+    public ResponseEntity<Void> removeFavoriteWorker(@AuthenticationPrincipal AuthUser principal,
+                                                      @PathVariable Long workerId) {
+        favoriteService.removeOwnerFavorite(principal.getDomainUser(), workerId);
+        return ResponseEntity.noContent().build();
     }
 }

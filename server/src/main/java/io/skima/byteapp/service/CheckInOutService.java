@@ -15,11 +15,24 @@ import java.time.LocalDateTime;
 @RequiredArgsConstructor
 public class CheckInOutService {
 
+    /** GPS 체크인 게이트 — 매장 반경 (m) */
+    private static final double GEOFENCE_METERS = 100.0;
+
     private final ShiftMatchRepository matchRepository;
     private final PayoutService payoutService;
 
     @Transactional
     public ShiftMatch checkIn(User worker, Long matchId) {
+        return checkIn(worker, matchId, null, null);
+    }
+
+    /**
+     * GPS 좌표 함께 받는 체크인 — 매장 반경 100m 안에서만 허용.
+     * 매장에 좌표가 없으면 게이트 스킵 (점주가 좌표 미입력한 매장은 검증 안 함).
+     * 워커가 좌표를 안 보내면 게이트 스킵 (구버전 클라이언트 호환).
+     */
+    @Transactional
+    public ShiftMatch checkIn(User worker, Long matchId, Double workerLat, Double workerLon) {
         ShiftMatch match = matchRepository.findById(matchId)
                 .orElseThrow(() -> BusinessException.notFound("매칭을 찾을 수 없습니다"));
         if (!match.getWorker().getId().equals(worker.getId())) {
@@ -28,9 +41,34 @@ public class CheckInOutService {
         if (match.getStatus() != MatchStatus.MATCHED) {
             throw BusinessException.conflict("이미 체크인되었거나 종료된 매칭입니다");
         }
+
+        var cafe = match.getShift().getCafe();
+        Double cafeLat = cafe.getLatitude();
+        Double cafeLon = cafe.getLongitude();
+        if (workerLat != null && workerLon != null && cafeLat != null && cafeLon != null) {
+            double dist = haversineMeters(workerLat, workerLon, cafeLat, cafeLon);
+            if (dist > GEOFENCE_METERS) {
+                throw BusinessException.badRequest(String.format(
+                        "매장에서 %.0fm 떨어져 있어 체크인할 수 없습니다 (반경 %.0fm 안에서만 가능)",
+                        dist, GEOFENCE_METERS));
+            }
+        }
+
         match.checkIn(LocalDateTime.now());
         match.getShift().markInProgress();
         return match;
+    }
+
+    /** Haversine 공식 — 두 좌표 사이 거리(미터) */
+    private static double haversineMeters(double lat1, double lon1, double lat2, double lon2) {
+        final double R = 6_371_000.0; // 지구 반지름 m
+        double dLat = Math.toRadians(lat2 - lat1);
+        double dLon = Math.toRadians(lon2 - lon1);
+        double a = Math.sin(dLat / 2) * Math.sin(dLat / 2)
+                 + Math.cos(Math.toRadians(lat1)) * Math.cos(Math.toRadians(lat2))
+                   * Math.sin(dLon / 2) * Math.sin(dLon / 2);
+        double c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+        return R * c;
     }
 
     @Transactional

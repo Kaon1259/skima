@@ -36,6 +36,13 @@ export default function WorkerLayout() {
       }}
     >
       <Tabs.Screen
+        name="home"
+        options={{
+          title: '홈',
+          tabBarIcon: ({ size }) => <Icon name="home" size={size ?? 22} />,
+        }}
+      />
+      <Tabs.Screen
         name="shifts"
         options={{
           title: '시프트',

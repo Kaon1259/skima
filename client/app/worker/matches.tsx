@@ -1,11 +1,13 @@
 import { useCallback, useState } from 'react';
 import { Alert, FlatList, Platform, Pressable, RefreshControl, Text, View } from 'react-native';
-import { router, useFocusEffect } from 'expo-router';
+import { router } from 'expo-router';
 import { ChatSheet } from '@/components/ChatSheet';
 import { Icon } from '@/components/Icon';
 import { RatingModal, blurFocusedForModal } from '@/components/RatingModal';
 
 import { api } from '@/lib/api';
+import { getCurrentCoords } from '@/lib/geolocation';
+import { useFocusPolling } from '@/lib/useFocusPolling';
 import { ShiftMatch, fmtDateTime, fmtKRW } from '@/lib/types';
 import { colors, radius, spacing, statusVisual, styles } from '@/lib/theme';
 
@@ -67,14 +69,22 @@ export default function WorkerMatchesScreen() {
     }
   }, []);
 
-  useFocusEffect(useCallback(() => {
-    load();
-  }, [load]));
+  useFocusPolling(load, 10000);
 
   async function checkIn(matchId: number) {
     setBusyId(matchId);
     try {
-      await api(`/api/worker/matches/${matchId}/check-in`, { method: 'POST' });
+      // GPS 좌표 — 가능하면 함께 보내 매장 반경 100m 게이트 검증
+      let coords: { latitude: number; longitude: number } | null = null;
+      try {
+        coords = await getCurrentCoords();
+      } catch {
+        // 권한 거부 / 위치 못 받음 — 좌표 없이 진행 (매장에 좌표 있으면 백엔드에서 게이트 적용 안 됨)
+      }
+      await api(`/api/worker/matches/${matchId}/check-in`, {
+        method: 'POST',
+        body: coords ?? {},
+      });
       notify('출근 체크인 완료');
       await load();
     } catch (e) {
@@ -138,7 +148,7 @@ export default function WorkerMatchesScreen() {
             <View style={styles.card}>
               <View style={{ flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between' }}>
                 <Pressable
-                  style={({ pressed }) => [{ flex: 1, paddingRight: 8 }, pressed && item.cafeId && { opacity: 0.7 }]}
+                  style={({ pressed }) => [{ flex: 1, paddingRight: 8 }, pressed && item.cafeId ? { opacity: 0.7 } : null]}
                   onPress={() => item.cafeId && router.push(`/cafe/${item.cafeId}` as never)}
                   disabled={!item.cafeId}
                 >
@@ -209,6 +219,23 @@ export default function WorkerMatchesScreen() {
                 >
                   <Text style={{ fontSize: 14 }}>💬</Text>
                   <Text style={styles.buttonSecondaryText}>점주와 채팅</Text>
+                  {item.chatUnreadCount && item.chatUnreadCount > 0 ? (
+                    <View
+                      style={{
+                        marginLeft: 4,
+                        paddingHorizontal: 6,
+                        paddingVertical: 1,
+                        borderRadius: radius.pill,
+                        backgroundColor: colors.danger,
+                        minWidth: 18,
+                        alignItems: 'center',
+                      }}
+                    >
+                      <Text style={{ fontSize: 10, fontWeight: '900', color: '#fff' }}>
+                        {item.chatUnreadCount > 99 ? '99+' : item.chatUnreadCount}
+                      </Text>
+                    </View>
+                  ) : null}
                 </Pressable>
               ) : null}
 

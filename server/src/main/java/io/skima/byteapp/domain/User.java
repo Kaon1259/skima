@@ -53,6 +53,10 @@ public class User {
     @Column(name = "last_notification_seen_at")
     private LocalDateTime lastNotificationSeenAt;
 
+    /** Expo Push Token — 디바이스별 1개. 새 디바이스에서 로그인하면 덮어씀 */
+    @Column(name = "expo_push_token", length = 255)
+    private String expoPushToken;
+
     /** 워커 자기신고 능력 등급. 디폴트 L2_BASIC. WORKER 만 의미 있음. */
     @Enumerated(EnumType.STRING)
     @Column(name = "self_reported_level", length = 16)
@@ -121,5 +125,9 @@ public class User {
 
     public void markNotificationsSeen(LocalDateTime at) {
         this.lastNotificationSeenAt = at;
+    }
+
+    public void setExpoPushToken(String token) {
+        this.expoPushToken = token;
     }
 }

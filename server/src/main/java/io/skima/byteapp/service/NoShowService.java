@@ -38,10 +38,17 @@ public class NoShowService {
     private final ShiftRepository shiftRepository;
     private final RatingRepository ratingRepository;
     private final SkimaProperties props;
+    private final io.skima.byteapp.repository.WorkerFavoriteCafeRepository workerFavoriteCafeRepository;
 
     public record NoShowOutcome(int noShowCount, int backupMatchedCount, int reopenedCount) {}
 
-    public record ManualNoShowOutcome(boolean backupMatched, boolean shiftReopened) {}
+    public record ManualNoShowOutcome(
+            boolean backupMatched,
+            boolean shiftReopened,
+            String backupWorkerName,
+            Long backupMatchId,
+            int favoritingWorkerCount
+    ) {}
 
     @Transactional
     public NoShowOutcome sweep() {
@@ -105,23 +112,37 @@ public class NoShowService {
             ratingRepository.save(auto);
         }
 
-        boolean backedUp = tryBackupMatch(shift);
+        // 백업 매칭 시도 — 결과로 워커 이름·매치 ID 추출
+        BackupResult backup = tryBackupMatchWithResult(shift);
         boolean reopened = false;
-        if (!backedUp) {
+        if (!backup.matched) {
             shift.markOpen();
             reopened = true;
             log.info("[NOSHOW_MANUAL] shift={} 백업 후보 없음 → OPEN 으로 재모집", shift.getId());
         }
-        return new ManualNoShowOutcome(backedUp, reopened);
+        // 재모집 시 즐겨찾기 매장으로 등록한 워커 수 — 단골 알림 안내용
+        int favCount = reopened
+                ? workerFavoriteCafeRepository.findWorkerIdsByCafeId(shift.getCafe().getId()).size()
+                : 0;
+        return new ManualNoShowOutcome(
+                backup.matched,
+                reopened,
+                backup.workerName,
+                backup.matchId,
+                favCount);
     }
 
     private boolean tryBackupMatch(Shift shift) {
+        return tryBackupMatchWithResult(shift).matched;
+    }
+
+    private BackupResult tryBackupMatchWithResult(Shift shift) {
         ShiftApplication next = applicationRepository
                 .findAllByShiftIdOrderByAppliedAtAsc(shift.getId()).stream()
                 .filter(a -> a.getStatus() == ApplicationStatus.PENDING)
                 .min(Comparator.comparing(ShiftApplication::getAppliedAt))
                 .orElse(null);
-        if (next == null) return false;
+        if (next == null) return new BackupResult(false, null, null);
 
         next.accept();
         // 다른 PENDING 모두 거절
@@ -133,9 +154,11 @@ public class NoShowService {
                 .shift(shift)
                 .worker(next.getWorker())
                 .build();
-        matchRepository.save(backup);
+        ShiftMatch saved = matchRepository.save(backup);
         log.info("[NOSHOW] shift={} → 백업 매칭 worker={}", shift.getId(), next.getWorker().getName());
         // shift status 는 MATCHED 유지
-        return true;
+        return new BackupResult(true, next.getWorker().getName(), saved.getId());
     }
+
+    private record BackupResult(boolean matched, String workerName, Long matchId) {}
 }

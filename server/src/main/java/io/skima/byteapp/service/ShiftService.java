@@ -28,6 +28,9 @@ public class ShiftService {
     private final CafeRepository cafeRepository;
     private final ShiftMatchRepository matchRepository;
     private final ShiftApplicationRepository applicationRepository;
+    private final io.skima.byteapp.repository.WorkerFavoriteCafeRepository workerFavoriteCafeRepository;
+    private final io.skima.byteapp.repository.UserRepository userRepository;
+    private final PushNotificationService pushService;
 
     @Transactional
     public Shift create(User owner, ShiftCreateRequest req) {
@@ -54,7 +57,26 @@ public class ShiftService {
                 .minSkill(req.minSkill())
                 .requirements(req.requirements())
                 .build();
-        return shiftRepository.save(shift);
+        var saved = shiftRepository.save(shift);
+
+        // 단골 워커들에게 푸시 — 즐겨찾기 매장 새 시프트
+        var favWorkerIds = workerFavoriteCafeRepository.findWorkerIdsByCafeId(cafe.getId());
+        if (!favWorkerIds.isEmpty()) {
+            var favWorkers = userRepository.findAllById(favWorkerIds);
+            pushService.sendToUsers(
+                    favWorkers,
+                    "⭐ " + cafe.getName() + " 새 시프트",
+                    fmtPushTime(saved.getStartAt()) + " 시작 · 시급 ₩" + String.format("%,d", saved.getHourlyWage()),
+                    "/cafe/" + cafe.getId());
+        }
+
+        return saved;
+    }
+
+    private static String fmtPushTime(java.time.LocalDateTime t) {
+        if (t == null) return "";
+        return String.format("%02d/%02d %02d:%02d",
+                t.getMonthValue(), t.getDayOfMonth(), t.getHour(), t.getMinute());
     }
 
     @Transactional(readOnly = true)

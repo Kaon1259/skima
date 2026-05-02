@@ -1,17 +1,28 @@
 {
   "expo": {
-    "name": "client",
-    "slug": "client",
+    "name": "Skima Byte",
+    "slug": "skima-byte",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "client",
+    "scheme": "skima",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "io.skima.byte",
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "출근 시 매장 반경 100m 안에서만 체크인할 수 있도록 위치를 사용합니다.",
+        "LSApplicationQueriesSchemes": [
+          "kakaokompassauth",
+          "storykompassauth",
+          "kakaolink",
+          "kakaoplus"
+        ]
+      }
     },
     "android": {
+      "package": "io.skima.byte",
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
@@ -19,7 +30,13 @@
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
       "edgeToEdgeEnabled": true,
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "permissions": [
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.RECEIVE_BOOT_COMPLETED",
+        "android.permission.SCHEDULE_EXACT_ALARM"
+      ]
     },
     "web": {
       "output": "static",
@@ -40,7 +57,19 @@
         }
       ],
       "expo-secure-store",
-      "@react-native-community/datetimepicker"
+      "@react-native-community/datetimepicker",
+      [
+        "expo-notifications",
+        {
+          "color": "#FFA500"
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "Skima Byte 가 매장 반경 100m 출근 인증을 위해 위치를 사용합니다."
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,

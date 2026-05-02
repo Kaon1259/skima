@@ -7,6 +7,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -47,5 +48,19 @@ public class MeController {
                 .orElseThrow(() -> new IllegalStateException("사용자를 찾을 수 없습니다"));
         u.updateWorkerProfile(req.selfReportedLevel(), req.capableRoles(), req.certifications());
         return me(principal);
+    }
+
+    /** Expo Push Token 등록 — 디바이스에서 expo-notifications 가 발급한 토큰 저장 */
+    @PostMapping("/push-token")
+    @Transactional
+    public Map<String, Object> registerPushToken(@AuthenticationPrincipal AuthUser principal,
+                                                  @RequestBody Map<String, String> body) {
+        var u = userRepository.findById(principal.getDomainUser().getId())
+                .orElseThrow(() -> new IllegalStateException("사용자를 찾을 수 없습니다"));
+        String token = body.get("token");
+        u.setExpoPushToken(token == null || token.isBlank() ? null : token);
+        Map<String, Object> result = new HashMap<>();
+        result.put("ok", true);
+        return result;
     }
 }

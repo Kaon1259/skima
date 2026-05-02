@@ -25,6 +25,8 @@ export type Cafe = {
   brandLetter?: string | null;
   brandColor?: string | null;
   brandName?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
 };
 
 export type Shift = {
@@ -205,6 +207,7 @@ export type OwnerShift = Shift & {
   payoutApprovedAt?: string | null;
   payoutAutoApproved?: boolean | null;
   payoutCompletedAt?: string | null;
+  chatUnreadCount?: number;
 };
 
 export type RatingDirection = 'OWNER_TO_WORKER' | 'WORKER_TO_OWNER';
@@ -249,7 +252,8 @@ export type NotificationItem = {
     | 'PAYOUT_COMPLETED'
     | 'PAYOUT_REQUESTED'
     | 'NOSHOW_REPORTED'
-    | 'SHIFT_CANCELED';
+    | 'SHIFT_CANCELED'
+    | 'FAVORITE_CAFE_NEW_SHIFT';
   title: string;
   subtitle: string;
   route: string;
@@ -287,6 +291,9 @@ export type ShiftApplication = {
   workerName: string;
   appliedAt: string;
   status: 'PENDING' | 'ACCEPTED' | 'REJECTED' | 'WITHDRAWN';
+  workerLevel?: SkillLevel | null;
+  workerRoles?: JobRole[];
+  workerCertifications?: string[];
 };
 
 export type ShiftMatch = {
@@ -310,6 +317,7 @@ export type ShiftMatch = {
   payoutApprovedAt?: string | null;
   payoutAutoApproved?: boolean | null;
   payoutCompletedAt?: string | null;
+  chatUnreadCount?: number;
 };
 
 export type JobRole =

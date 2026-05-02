@@ -29,7 +29,7 @@ export default function KakaoCallback() {
       try {
         const auth = await loginWithKakao(String(params.code));
         if (cancelled) return;
-        if (auth.role === 'WORKER') router.replace('/worker/shifts');
+        if (auth.role === 'WORKER') router.replace('/worker/home');
         else router.replace('/');
       } catch (e) {
         if (cancelled) return;

@@ -35,16 +35,26 @@ public class Cafe {
     @Column(name = "brand_key", length = 64)
     private String brandKey;
 
+    /** 매장 좌표 — GPS 체크인 게이트용. null 이면 게이트 스킵 (좌표 미입력 매장은 검증 안 함) */
+    @Column(name = "latitude")
+    private Double latitude;
+
+    @Column(name = "longitude")
+    private Double longitude;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
     @Builder
-    public Cafe(User owner, String name, String address, CafeType cafeType, String brandKey) {
+    public Cafe(User owner, String name, String address, CafeType cafeType, String brandKey,
+                Double latitude, Double longitude) {
         this.owner = owner;
         this.name = name;
         this.address = address;
         this.cafeType = cafeType == null ? CafeType.INDIVIDUAL_CAFE : cafeType;
         this.brandKey = brandKey;
+        this.latitude = latitude;
+        this.longitude = longitude;
     }
 
     @PrePersist
@@ -57,5 +67,10 @@ public class Cafe {
         this.address = address;
         if (cafeType != null) this.cafeType = cafeType;
         this.brandKey = brandKey;
+    }
+
+    public void updateLocation(Double latitude, Double longitude) {
+        this.latitude = latitude;
+        this.longitude = longitude;
     }
 }

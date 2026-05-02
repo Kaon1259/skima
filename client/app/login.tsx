@@ -11,9 +11,12 @@ import {
 } from 'react-native';
 import { router } from 'expo-router';
 
+import * as WebBrowser from 'expo-web-browser';
+import * as Linking from 'expo-linking';
+
 import { useAuth } from '@/lib/auth';
 import { ApiError } from '@/lib/api';
-import { buildKakaoAuthorizeUrl } from '@/lib/config';
+import { buildKakaoAuthorizeUrl, KAKAO_REDIRECT_URI } from '@/lib/config';
 import { colors, radius, spacing, styles } from '@/lib/theme';
 
 const SEED_ACCOUNTS: { id: string; label: string; sub: string; tag: string }[] = [
@@ -23,10 +26,36 @@ const SEED_ACCOUNTS: { id: string; label: string; sub: string; tag: string }[] =
 ];
 
 export default function LoginScreen() {
-  const { login } = useAuth();
+  const { login, loginWithKakao } = useAuth();
   const [username, setUsername] = useState('worker1');
   const [password, setPassword] = useState('pw1234');
   const [busy, setBusy] = useState(false);
+
+  /** Native 카카오 로그인 — expo-web-browser 인증 세션 + skima:// deep-link */
+  async function handleKakaoNative() {
+    setBusy(true);
+    try {
+      const authUrl = buildKakaoAuthorizeUrl();
+      const result = await WebBrowser.openAuthSessionAsync(authUrl, KAKAO_REDIRECT_URI);
+      if (result.type !== 'success' || !result.url) {
+        return; // 사용자 취소
+      }
+      const parsed = Linking.parse(result.url);
+      const code = (parsed.queryParams?.code as string | undefined) ?? null;
+      if (!code) {
+        showError('카카오 응답에서 code 를 받지 못했습니다');
+        return;
+      }
+      const auth = await loginWithKakao(code);
+      if (auth.role === 'OWNER') router.replace('/owner/shifts');
+      else if (auth.role === 'WORKER') router.replace('/worker/home');
+      else router.replace('/admin/kpi');
+    } catch (e) {
+      showError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
 
   async function handleLogin(u?: string, p?: string) {
     const usr = (u ?? username).trim();
@@ -39,7 +68,7 @@ export default function LoginScreen() {
     try {
       const auth = await login(usr, pwd);
       if (auth.role === 'OWNER') router.replace('/owner/shifts');
-      else if (auth.role === 'WORKER') router.replace('/worker/shifts');
+      else if (auth.role === 'WORKER') router.replace('/worker/home');
       else router.replace('/admin/kpi');
     } catch (e) {
       const msg =
@@ -139,7 +168,7 @@ export default function LoginScreen() {
             if (Platform.OS === 'web') {
               window.location.href = buildKakaoAuthorizeUrl();
             } else {
-              showError('카카오 로그인은 현재 웹에서만 동작합니다 (Native deep-link 셋업 필요)');
+              handleKakaoNative();
             }
           }}
           disabled={busy}

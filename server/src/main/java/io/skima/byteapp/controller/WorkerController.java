@@ -60,6 +60,8 @@ public class WorkerController {
     private final BrandCatalog brandCatalog;
     private final ComplianceService complianceService;
     private final NotificationService notificationService;
+    private final io.skima.byteapp.service.FavoriteService favoriteService;
+    private final io.skima.byteapp.repository.ChatMessageRepository chatRepository;
 
     /** OPEN 시프트 목록 — 워커 본인 지원 상태 + 브랜드 정보 + 매장 신뢰도 enrich */
     @GetMapping("/shifts")
@@ -173,22 +175,33 @@ public class WorkerController {
         return matches.stream()
                 .map(m -> {
                     var po = payoutRepository.findByMatchId(m.getId()).orElse(null);
+                    // 워커가 안 본 점주 메시지 수
+                    var seen = m.getWorkerChatSeenAt();
+                    long chatUnread = seen == null
+                            ? chatRepository.countByMatchIdAndSenderRole(
+                                    m.getId(), io.skima.byteapp.domain.UserRole.OWNER)
+                            : chatRepository.countByMatchIdAndSenderRoleAndCreatedAtAfter(
+                                    m.getId(), io.skima.byteapp.domain.UserRole.OWNER, seen);
                     return MatchResponse.from(m,
                             ownerRatedMatches.contains(m.getId()),
                             workerRatedMatches.contains(m.getId()),
                             po == null ? null : po.getStatus().name(),
                             po == null ? null : po.getApprovedAt(),
                             po == null ? null : po.isAutoApproved(),
-                            po == null ? null : po.getCompletedAt());
+                            po == null ? null : po.getCompletedAt(),
+                            chatUnread);
                 })
                 .toList();
     }
 
-    /** 출근 체크인 */
+    /** 출근 체크인 — GPS 좌표 동봉 가능 (반경 100m 게이트). 좌표 미동봉 시 게이트 스킵 */
     @PostMapping("/matches/{matchId}/check-in")
     public MatchResponse checkIn(@AuthenticationPrincipal AuthUser principal,
-                                 @PathVariable Long matchId) {
-        var m = checkInOutService.checkIn(principal.getDomainUser(), matchId);
+                                 @PathVariable Long matchId,
+                                 @RequestBody(required = false) Map<String, Double> body) {
+        Double lat = body == null ? null : body.get("latitude");
+        Double lon = body == null ? null : body.get("longitude");
+        var m = checkInOutService.checkIn(principal.getDomainUser(), matchId, lat, lon);
         return MatchResponse.from(m);
     }
 
@@ -240,6 +253,27 @@ public class WorkerController {
     @PostMapping("/notifications/mark-seen")
     public ResponseEntity<Void> markNotificationsSeen(@AuthenticationPrincipal AuthUser principal) {
         notificationService.markAllSeen(principal.getDomainUser());
+        return ResponseEntity.noContent().build();
+    }
+
+    /* ========= 즐겨찾기 매장 (Phase 3 리텐션) ========= */
+
+    @GetMapping("/favorites/cafes")
+    public List<Long> myFavoriteCafeIds(@AuthenticationPrincipal AuthUser principal) {
+        return favoriteService.workerFavoriteCafeIds(principal.getDomainUser());
+    }
+
+    @PostMapping("/favorites/cafes/{cafeId}")
+    public ResponseEntity<Void> addFavoriteCafe(@AuthenticationPrincipal AuthUser principal,
+                                                 @PathVariable Long cafeId) {
+        favoriteService.addWorkerFavorite(principal.getDomainUser(), cafeId);
+        return ResponseEntity.noContent().build();
+    }
+
+    @DeleteMapping("/favorites/cafes/{cafeId}")
+    public ResponseEntity<Void> removeFavoriteCafe(@AuthenticationPrincipal AuthUser principal,
+                                                    @PathVariable Long cafeId) {
+        favoriteService.removeWorkerFavorite(principal.getDomainUser(), cafeId);
         return ResponseEntity.noContent().build();
     }
 }

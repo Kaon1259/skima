@@ -43,7 +43,9 @@ public record OwnerShiftView(
         // 직무·등급·자격 (Phase A 능력 매칭)
         JobRole jobRole,
         SkillLevel minSkill,
-        Set<String> requirements
+        Set<String> requirements,
+        // 점주 측 채팅 unread count (워커가 보낸 메시지 중 점주가 안 본 것)
+        long chatUnreadCount
 ) {
     public static OwnerShiftView from(
             Shift s,
@@ -58,7 +60,8 @@ public record OwnerShiftView(
             String payoutStatus,
             java.time.LocalDateTime payoutApprovedAt,
             Boolean payoutAutoApproved,
-            java.time.LocalDateTime payoutCompletedAt
+            java.time.LocalDateTime payoutCompletedAt,
+            long chatUnreadCount
     ) {
         Long matchMin = (s.getMatchedAt() != null && s.getCreatedAt() != null)
                 ? Duration.between(s.getCreatedAt(), s.getMatchedAt()).toMinutes()
@@ -95,7 +98,8 @@ public record OwnerShiftView(
                 payoutCompletedAt,
                 s.getJobRole(),
                 s.getMinSkill(),
-                s.getRequirements() == null ? new HashSet<>() : new HashSet<>(s.getRequirements())
+                s.getRequirements() == null ? new HashSet<>() : new HashSet<>(s.getRequirements()),
+                chatUnreadCount
         );
     }
 }

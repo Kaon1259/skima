@@ -11,7 +11,9 @@ public record CafeResponse(
         String brandKey,
         String brandLetter,
         String brandColor,
-        String brandName
+        String brandName,
+        Double latitude,
+        Double longitude
 ) {
     public static CafeResponse from(Cafe c, BrandResponse brand) {
         return new CafeResponse(
@@ -22,7 +24,9 @@ public record CafeResponse(
                 c.getBrandKey(),
                 brand != null ? brand.letter() : null,
                 brand != null ? brand.color() : null,
-                brand != null ? brand.name() : null
+                brand != null ? brand.name() : null,
+                c.getLatitude(),
+                c.getLongitude()
         );
     }
 

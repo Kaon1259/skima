@@ -5,8 +5,12 @@ import { Platform } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import 'react-native-reanimated';
 
-import { AuthProvider } from '@/lib/auth';
+import { AuthProvider, useAuth } from '@/lib/auth';
+import { setupPushHandler, usePushRegistration, usePushTapNavigation } from '@/lib/push';
+import { ToastProvider } from '@/lib/toast';
 import { colors } from '@/lib/theme';
+
+setupPushHandler();
 
 const NavTheme = {
   ...DefaultTheme,
@@ -26,10 +30,19 @@ const initialMetrics = {
   frame: { x: 0, y: 0, width: 0, height: 0 },
 };
 
+function PushBridge() {
+  const { auth } = useAuth();
+  usePushRegistration(!!auth);
+  usePushTapNavigation();
+  return null;
+}
+
 export default function RootLayout() {
   return (
     <SafeAreaProvider initialMetrics={Platform.OS === 'web' ? initialMetrics : undefined}>
       <AuthProvider>
+        <PushBridge />
+        <ToastProvider>
         <ThemeProvider value={NavTheme}>
           <Stack
             screenOptions={{
@@ -53,6 +66,7 @@ export default function RootLayout() {
           </Stack>
           <StatusBar style="dark" />
         </ThemeProvider>
+        </ToastProvider>
       </AuthProvider>
     </SafeAreaProvider>
   );

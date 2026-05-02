@@ -1,10 +1,20 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { Alert, FlatList, Platform, Pressable, RefreshControl, Text, View } from 'react-native';
-import { router, useFocusEffect } from 'expo-router';
+import { router } from 'expo-router';
 import { Icon } from '@/components/Icon';
 import ShiftSkillBadges from '@/components/ShiftSkillBadges';
 import { api, ApiError } from '@/lib/api';
-import { JobRole, MyProfile, SkillLevel, WorkerShift, fmtDateTime, fmtKRW, fmtPercent } from '@/lib/types';
+import { useFocusPolling } from '@/lib/useFocusPolling';
+import {
+  JobRole,
+  MyProfile,
+  SKILL_LEVEL_ORDER,
+  SkillLevel,
+  WorkerShift,
+  fmtDateTime,
+  fmtKRW,
+  fmtPercent,
+} from '@/lib/types';
 
 function cafeTypeLabel(t: string): string {
   switch (t) {
@@ -22,18 +32,66 @@ function durationHours(startIso: string, endIso: string) {
   return Math.round((ms / (1000 * 60 * 60)) * 10) / 10;
 }
 
+type SortMode = 'time' | 'rating' | 'wage';
+
 export default function WorkerShiftsScreen() {
   const [shifts, setShifts] = useState<WorkerShift[]>([]);
-  const [me, setMe] = useState<WorkerProfile | null>(null);
+  const [me, setMe] = useState<MyProfile | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [busyId, setBusyId] = useState<number | null>(null);
+  const [fitOnly, setFitOnly] = useState(false);
+  const [sortMode, setSortMode] = useState<SortMode>('time');
+
+  const myLevelRank = me?.selfReportedLevel
+    ? SKILL_LEVEL_ORDER[me.selfReportedLevel]
+    : null;
+  const myRolesSet = useMemo(
+    () => new Set(me?.capableRoles ?? []),
+    [me?.capableRoles],
+  );
+  const myCertsSet = useMemo(
+    () => new Set(me?.certifications ?? []),
+    [me?.certifications],
+  );
+
+  /** 시프트가 내 능력에 맞는지 — fitOnly 토글 + 추천 정렬용 */
+  const isFitForMe = useCallback(
+    (s: WorkerShift): boolean => {
+      if (s.minSkill && myLevelRank != null
+          && SKILL_LEVEL_ORDER[s.minSkill] > myLevelRank) return false;
+      if (s.jobRole && myRolesSet.size > 0 && !myRolesSet.has(s.jobRole)) return false;
+      if (s.requirements && s.requirements.length > 0) {
+        for (const r of s.requirements) {
+          if (!myCertsSet.has(r)) return false;
+        }
+      }
+      return true;
+    },
+    [myLevelRank, myRolesSet, myCertsSet],
+  );
+
+  const visibleShifts = useMemo(() => {
+    let xs = fitOnly ? shifts.filter(isFitForMe) : shifts.slice();
+    if (sortMode === 'rating') {
+      xs.sort((a, b) => (b.cafeAvgRating ?? -1) - (a.cafeAvgRating ?? -1));
+    } else if (sortMode === 'wage') {
+      xs.sort((a, b) => b.hourlyWage - a.hourlyWage);
+    } else {
+      xs.sort((a, b) => (a.startAt ?? '').localeCompare(b.startAt ?? ''));
+    }
+    return xs;
+  }, [shifts, fitOnly, sortMode, isFitForMe]);
+
+  const profileIncomplete = !!me
+    && me.role === 'WORKER'
+    && (me.selfReportedLevel == null || (me.capableRoles?.length ?? 0) === 0);
 
   const load = useCallback(async () => {
     setRefreshing(true);
     try {
       const [data, profile] = await Promise.all([
         api<WorkerShift[]>('/api/worker/shifts'),
-        api<WorkerProfile>('/api/me').catch(() => null),
+        api<MyProfile>('/api/me').catch(() => null),
       ]);
       setShifts(data);
       if (profile) setMe(profile);
@@ -44,9 +102,7 @@ export default function WorkerShiftsScreen() {
     }
   }, []);
 
-  useFocusEffect(useCallback(() => {
-    load();
-  }, [load]));
+  useFocusPolling(load, 15000);
 
   async function apply(shiftId: number) {
     setBusyId(shiftId);
@@ -94,19 +150,190 @@ export default function WorkerShiftsScreen() {
       style={{ backgroundColor: colors.surfaceAlt }}
       contentContainerStyle={{ padding: spacing.lg, paddingBottom: 100 }}
       showsVerticalScrollIndicator={false}
-      data={shifts}
+      data={visibleShifts}
       keyExtractor={(s) => String(s.id)}
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={load} tintColor={colors.primary} />}
       ListHeaderComponent={
         <View style={{ marginBottom: spacing.lg }}>
           <Text style={styles.h2}>지금 일할 수 있는 시프트</Text>
           <Text style={[styles.subtitle, { marginTop: 4 }]}>1탭 지원 · 면접 없음 · 30분 내 입금</Text>
+
+          {profileIncomplete ? (
+            <Pressable
+              onPress={() => router.push('/worker/profile' as never)}
+              style={({ pressed }) => [
+                {
+                  marginTop: 14,
+                  padding: 12,
+                  borderRadius: radius.md,
+                  backgroundColor: colors.warnSoft,
+                  borderWidth: 1,
+                  borderColor: colors.warn,
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  gap: 10,
+                },
+                pressed && { opacity: 0.85 },
+              ]}
+            >
+              <Text style={{ fontSize: 20 }}>⚙️</Text>
+              <View style={{ flex: 1 }}>
+                <Text style={{ fontSize: 13, fontWeight: '800', color: colors.warn }}>
+                  능력 자기신고를 완료해 주세요
+                </Text>
+                <Text style={{ fontSize: 11, color: colors.text, marginTop: 2 }}>
+                  등급·가능 직무·자격을 입력하면 매칭율이 올라갑니다
+                </Text>
+              </View>
+              <Icon name="chevron-forward" size={18} color={colors.warn} />
+            </Pressable>
+          ) : null}
+
+          {/* 정렬 + 필터 */}
+          <View style={{ marginTop: 14, flexDirection: 'row', flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>
+            {(['time', 'rating', 'wage'] as SortMode[]).map((m) => {
+              const active = sortMode === m;
+              const label = m === 'time' ? '⏰ 시작순' : m === 'rating' ? '★ 별점순' : '💰 시급순';
+              return (
+                <Pressable
+                  key={m}
+                  onPress={() => setSortMode(m)}
+                  style={({ pressed }) => [
+                    {
+                      paddingHorizontal: 10,
+                      paddingVertical: 6,
+                      borderRadius: radius.pill,
+                      backgroundColor: active ? colors.primary : colors.surface,
+                      borderWidth: 1,
+                      borderColor: active ? colors.primary : colors.border,
+                    },
+                    pressed && { opacity: 0.85 },
+                  ]}
+                >
+                  <Text style={{ fontSize: 11, fontWeight: '800', color: active ? '#fff' : colors.text }}>
+                    {label}
+                  </Text>
+                </Pressable>
+              );
+            })}
+            {myLevelRank != null || myRolesSet.size > 0 || myCertsSet.size > 0 ? (
+              <Pressable
+                onPress={() => setFitOnly((v) => !v)}
+                style={({ pressed }) => [
+                  {
+                    paddingHorizontal: 10,
+                    paddingVertical: 6,
+                    borderRadius: radius.pill,
+                    backgroundColor: fitOnly ? colors.success : colors.surface,
+                    borderWidth: 1,
+                    borderColor: fitOnly ? colors.success : colors.border,
+                    flexDirection: 'row',
+                    gap: 4,
+                    alignItems: 'center',
+                  },
+                  pressed && { opacity: 0.85 },
+                ]}
+              >
+                <Text style={{ fontSize: 11, fontWeight: '800', color: fitOnly ? '#fff' : colors.text }}>
+                  {fitOnly ? '✓ 내 능력 매칭만' : '내 능력 매칭만'}
+                </Text>
+              </Pressable>
+            ) : null}
+          </View>
+          <Text style={{ fontSize: 11, color: colors.textMuted, marginTop: 6 }}>
+            {visibleShifts.length}건 표시{fitOnly && shifts.length !== visibleShifts.length
+              ? ` (전체 ${shifts.length}건 중)`
+              : ''}
+          </Text>
         </View>
       }
       ListEmptyComponent={
-        <View style={{ paddingTop: 60, alignItems: 'center' }}>
-          <Text style={{ fontSize: 36, marginBottom: 8 }}>🕐</Text>
-          <Text style={styles.bodyMuted}>현재 모집 중인 시프트가 없어요</Text>
+        <View style={{ paddingTop: 40, paddingHorizontal: spacing.lg, alignItems: 'center' }}>
+          <Text style={{ fontSize: 44, marginBottom: 10 }}>{fitOnly ? '🎯' : '🕐'}</Text>
+          <Text style={[styles.bodyMuted, { fontSize: 14, fontWeight: '700' }]}>
+            {fitOnly ? '내 능력에 맞는 시프트가 없어요' : '지금 모집 중인 시프트가 없어요'}
+          </Text>
+          <Text style={[styles.bodyMuted, { fontSize: 12, marginTop: 4, textAlign: 'center' }]}>
+            {fitOnly
+              ? '내 등급/직무/자격을 다시 확인하거나 전체 시프트를 둘러보세요'
+              : '새 시프트가 올라오면 자동으로 표시돼요'}
+          </Text>
+
+          <View style={{ marginTop: 20, alignItems: 'stretch', width: '100%', maxWidth: 360, gap: 8 }}>
+            {fitOnly ? (
+              <Pressable
+                onPress={() => setFitOnly(false)}
+                style={({ pressed }) => [
+                  {
+                    paddingVertical: 12,
+                    paddingHorizontal: 16,
+                    borderRadius: radius.md,
+                    backgroundColor: colors.primary,
+                    alignItems: 'center',
+                  },
+                  pressed && { opacity: 0.85 },
+                ]}
+              >
+                <Text style={{ fontSize: 13, fontWeight: '800', color: '#fff' }}>
+                  전체 시프트 보기
+                </Text>
+              </Pressable>
+            ) : null}
+
+            {profileIncomplete ? (
+              <Pressable
+                onPress={() => router.push('/worker/profile' as never)}
+                style={({ pressed }) => [
+                  {
+                    paddingVertical: 12,
+                    paddingHorizontal: 16,
+                    borderRadius: radius.md,
+                    backgroundColor: colors.warnSoft,
+                    borderWidth: 1,
+                    borderColor: colors.warn,
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    gap: 8,
+                  },
+                  pressed && { opacity: 0.85 },
+                ]}
+              >
+                <Text style={{ fontSize: 16 }}>⚙️</Text>
+                <View style={{ flex: 1 }}>
+                  <Text style={{ fontSize: 12, fontWeight: '800', color: colors.warn }}>
+                    능력 자기신고 완료하기
+                  </Text>
+                  <Text style={{ fontSize: 10, color: colors.text, marginTop: 1 }}>
+                    매칭율을 높이고 더 좋은 시프트 추천 받기
+                  </Text>
+                </View>
+              </Pressable>
+            ) : null}
+
+            <View
+              style={{
+                paddingVertical: 12,
+                paddingHorizontal: 16,
+                borderRadius: radius.md,
+                backgroundColor: colors.surface,
+                borderWidth: 1,
+                borderColor: colors.border,
+                flexDirection: 'row',
+                alignItems: 'center',
+                gap: 8,
+              }}
+            >
+              <Text style={{ fontSize: 16 }}>⭐</Text>
+              <View style={{ flex: 1 }}>
+                <Text style={{ fontSize: 12, fontWeight: '800', color: colors.text }}>
+                  자주 가는 매장을 단골 등록하세요
+                </Text>
+                <Text style={{ fontSize: 10, color: colors.textMuted, marginTop: 1 }}>
+                  새 시프트가 올라오면 즉시 알림받을 수 있어요
+                </Text>
+              </View>
+            </View>
+          </View>
         </View>
       }
       renderItem={({ item }) => {

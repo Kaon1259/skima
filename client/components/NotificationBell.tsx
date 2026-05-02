@@ -5,10 +5,11 @@ import { router } from 'expo-router';
 import { Icon } from '@/components/Icon';
 import { blurFocusedForModal } from '@/components/RatingModal';
 import { api } from '@/lib/api';
+import { useToast } from '@/lib/toast';
 import { NotificationItem, fmtDateTime } from '@/lib/types';
 import { colors, radius, spacing, styles } from '@/lib/theme';
 
-const POLL_MS = 30_000;
+const POLL_MS = 15_000;
 
 const SEVERITY_COLOR: Record<NotificationItem['severity'], string> = {
   info: colors.info,
@@ -35,6 +36,7 @@ const TYPE_ICON: Record<NotificationItem['type'], string> = {
   PAYOUT_REQUESTED: 'wallet',
   NOSHOW_REPORTED: 'alert-circle',
   SHIFT_CANCELED: 'alert-circle',
+  FAVORITE_CAFE_NEW_SHIFT: 'star',
 };
 
 type Role = 'owner' | 'worker';
@@ -47,18 +49,50 @@ export default function NotificationBell({ role }: Props) {
   const [items, setItems] = useState<NotificationItem[]>([]);
   const [open, setOpen] = useState(false);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const seenKeysRef = useRef<Set<string>>(new Set());
+  const baselineLoadedRef = useRef(false);
+  const toast = useToast();
 
   const listUrl = `/api/${role}/notifications`;
   const markUrl = `/api/${role}/notifications/mark-seen`;
+
+  const itemKey = (it: NotificationItem) =>
+    `${it.type}:${it.targetId ?? ''}:${it.at}`;
 
   const load = useCallback(async () => {
     try {
       const data = await api<NotificationItem[]>(listUrl);
       setItems(data);
+
+      // 첫 로드는 baseline (이미 누적된 알림은 토스트 안 띄움)
+      if (!baselineLoadedRef.current) {
+        data.forEach((it) => seenKeysRef.current.add(itemKey(it)));
+        baselineLoadedRef.current = true;
+        return;
+      }
+
+      // 새 unread 항목만 토스트
+      const fresh = data
+        .filter((it) => it.unread && !seenKeysRef.current.has(itemKey(it)))
+        .sort((a, b) => a.at.localeCompare(b.at));
+      for (const it of fresh) {
+        seenKeysRef.current.add(itemKey(it));
+        toast.push({
+          title: it.title,
+          subtitle: it.subtitle,
+          severity: it.severity,
+          route: it.route,
+        });
+      }
+      // 사라진 알림 키도 정리 (메모리 누수 방지)
+      const liveKeys = new Set(data.map(itemKey));
+      seenKeysRef.current.forEach((k) => {
+        if (!liveKeys.has(k)) seenKeysRef.current.delete(k);
+      });
     } catch {
       // 조용히 실패 — 알림은 부가 기능
     }
-  }, [listUrl]);
+  }, [listUrl, toast]);
 
   useEffect(() => {
     load();

@@ -4,6 +4,7 @@ import { router } from 'expo-router';
 import { Icon } from '@/components/Icon';
 
 import { api } from '@/lib/api';
+import { useToast } from '@/lib/toast';
 import {
   Cafe,
   JobRole,
@@ -22,7 +23,10 @@ import {
   toServerDateTime,
 } from '@/components/DateTimePicker';
 
+const MIN_WAGE_KR_2026 = 10030;
+
 export default function NewShiftScreen() {
+  const toast = useToast();
   const [cafes, setCafes] = useState<Cafe[]>([]);
   const [cafeId, setCafeId] = useState<number | null>(null);
   const [startAt, setStartAt] = useState<string>(defaultStartLocal());
@@ -105,6 +109,25 @@ export default function NewShiftScreen() {
       notify('근무 시간과 시급은 양수여야 합니다');
       return;
     }
+    // 최저시급 검증 — 미만이어도 등록은 가능, 단 확인 필요
+    if (wage < MIN_WAGE_KR_2026) {
+      const ok = Platform.OS === 'web'
+        ? window.confirm(
+            `시급 ${wage.toLocaleString()}원은 2026년 최저시급(${MIN_WAGE_KR_2026.toLocaleString()}원) 미만입니다.\n` +
+            `이대로 등록하시면 워커들이 지원을 꺼릴 수 있습니다. 진행할까요?`,
+          )
+        : await new Promise<boolean>((resolve) => {
+            Alert.alert(
+              '최저시급 경고',
+              `시급 ${wage.toLocaleString()}원은 2026 최저시급(${MIN_WAGE_KR_2026.toLocaleString()}원) 미만입니다.`,
+              [
+                { text: '취소', style: 'cancel', onPress: () => resolve(false) },
+                { text: '그대로 등록', onPress: () => resolve(true) },
+              ],
+            );
+          });
+      if (!ok) return;
+    }
     setBusy(true);
     try {
       if (bulk) {
@@ -152,6 +175,19 @@ export default function NewShiftScreen() {
         });
         notify('시프트 등록 완료! 1시간 매칭 SLA 시작');
       }
+      // 단골 워커에게 알림 발송 안내 — 토스트
+      api<{ count: number }>(`/api/owner/cafes/${cafeId}/favoriting-count`)
+        .then((r) => {
+          if (r.count > 0) {
+            toast.push({
+              title: `⭐ 단골 워커 ${r.count}명에게 알림 발송`,
+              subtitle: '단골로 등록한 워커가 새 시프트를 즉시 확인할 수 있어요',
+              severity: 'success',
+              ttl: 6000,
+            });
+          }
+        })
+        .catch(() => {});
       router.replace('/owner/shifts');
     } catch (e) {
       notify((e as Error).message);
@@ -224,6 +260,32 @@ export default function NewShiftScreen() {
         />
 
         <Text style={[styles.subtitle, { marginBottom: 6 }]}>시급 (원)</Text>
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
+          {[10000, 11000, 12000, 13000, 15000].map((w) => {
+            const active = hourlyWage === String(w);
+            return (
+              <Pressable
+                key={w}
+                onPress={() => setHourlyWage(String(w))}
+                style={({ pressed }) => [
+                  {
+                    paddingHorizontal: 12,
+                    paddingVertical: 6,
+                    borderRadius: radius.pill,
+                    backgroundColor: active ? colors.primary : colors.surface,
+                    borderWidth: 1,
+                    borderColor: active ? colors.primary : colors.border,
+                  },
+                  pressed && { opacity: 0.85 },
+                ]}
+              >
+                <Text style={{ fontSize: 12, fontWeight: '800', color: active ? '#fff' : colors.text }}>
+                  {(w / 1000).toFixed(0)}k
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
         <TextInput
           style={styles.input}
           value={hourlyWage}
@@ -231,6 +293,25 @@ export default function NewShiftScreen() {
           keyboardType="numeric"
           placeholderTextColor={colors.textLight}
         />
+        {wage > 0 && wage < MIN_WAGE_KR_2026 ? (
+          <View
+            style={{
+              marginTop: -8,
+              marginBottom: 12,
+              padding: 10,
+              borderRadius: radius.md,
+              backgroundColor: colors.warnSoft,
+              flexDirection: 'row',
+              gap: 8,
+              alignItems: 'center',
+            }}
+          >
+            <Text style={{ fontSize: 16 }}>⚠️</Text>
+            <Text style={{ flex: 1, fontSize: 11, fontWeight: '700', color: colors.warn }}>
+              2026 최저시급({MIN_WAGE_KR_2026.toLocaleString()}원) 미만입니다 — 워커 지원이 적을 수 있어요
+            </Text>
+          </View>
+        ) : null}
 
         <Text style={[styles.subtitle, { marginBottom: 6 }]}>설명</Text>
         <TextInput

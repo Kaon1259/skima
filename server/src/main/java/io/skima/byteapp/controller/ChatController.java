@@ -34,4 +34,11 @@ public class ChatController {
         return ChatMessageResponse.from(
                 chatService.send(principal.getDomainUser(), matchId, req.body()));
     }
+
+    /** 사용자 role 기준 채팅 마지막 본 시각을 now 로 갱신 — 클라이언트가 ChatSheet 열 때 호출 */
+    @PostMapping("/seen")
+    public void markSeen(@AuthenticationPrincipal AuthUser principal,
+                         @PathVariable Long matchId) {
+        chatService.markSeen(principal.getDomainUser(), matchId);
+    }
 }

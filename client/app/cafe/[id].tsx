@@ -22,19 +22,46 @@ export default function CafeDetailScreen() {
   const [detail, setDetail] = useState<CafeDetail | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [busyShiftId, setBusyShiftId] = useState<number | null>(null);
+  const [isFavorite, setIsFavorite] = useState(false);
+  const [busyFav, setBusyFav] = useState(false);
+
+  const isWorkerInit = auth?.role === 'WORKER';
 
   const load = useCallback(async () => {
     if (!cafeId) return;
     setRefreshing(true);
     try {
-      const data = await api<CafeDetail>(`/api/cafes/${cafeId}/detail`);
+      const [data, favIds] = await Promise.all([
+        api<CafeDetail>(`/api/cafes/${cafeId}/detail`),
+        isWorkerInit
+          ? api<number[]>('/api/worker/favorites/cafes').catch(() => [] as number[])
+          : Promise.resolve([] as number[]),
+      ]);
       setDetail(data);
+      setIsFavorite(favIds.includes(Number(cafeId)));
     } catch (e) {
       notify((e as Error).message);
     } finally {
       setRefreshing(false);
     }
-  }, [cafeId]);
+  }, [cafeId, isWorkerInit]);
+
+  async function toggleFavorite() {
+    if (!cafeId || busyFav) return;
+    const was = isFavorite;
+    setIsFavorite(!was);
+    setBusyFav(true);
+    try {
+      await api(`/api/worker/favorites/cafes/${cafeId}`, {
+        method: was ? 'DELETE' : 'POST',
+      });
+    } catch (e) {
+      setIsFavorite(was);
+      notify((e as Error).message);
+    } finally {
+      setBusyFav(false);
+    }
+  }
 
   useFocusEffect(useCallback(() => {
     load();
@@ -81,6 +108,38 @@ export default function CafeDetailScreen() {
       ListHeaderComponent={
         <View>
           <CafeHeader detail={detail} />
+          {isWorker ? (
+            <Pressable
+              onPress={toggleFavorite}
+              disabled={busyFav}
+              style={({ pressed }) => [
+                {
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 8,
+                  paddingVertical: 12,
+                  borderRadius: radius.md,
+                  borderWidth: 1.5,
+                  borderColor: isFavorite ? colors.warn : colors.border,
+                  backgroundColor: isFavorite ? colors.warnSoft : colors.surface,
+                  marginBottom: spacing.md,
+                },
+                pressed && { opacity: 0.85 },
+              ]}
+            >
+              <Text style={{ fontSize: 18 }}>{isFavorite ? '⭐' : '☆'}</Text>
+              <Text
+                style={{
+                  fontSize: 13,
+                  fontWeight: '800',
+                  color: isFavorite ? colors.warn : colors.text,
+                }}
+              >
+                {isFavorite ? '단골 매장 — 새 시프트 알림 받는 중' : '단골 매장으로 등록'}
+              </Text>
+            </Pressable>
+          ) : null}
           <SignalsCard detail={detail} />
           {isOwnerView ? <OwnerMonthCard detail={detail} /> : null}
           {isOwnerView && detail.ownerView!.regulars.length > 0 ? (

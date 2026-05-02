@@ -26,14 +26,16 @@ public record MatchResponse(
         String payoutStatus,
         LocalDateTime payoutApprovedAt,
         Boolean payoutAutoApproved,
-        LocalDateTime payoutCompletedAt
+        LocalDateTime payoutCompletedAt,
+        // 채팅 unread (워커 기준 — 점주가 보낸 메시지 중 워커가 안 본 것)
+        long chatUnreadCount
 ) {
     public static MatchResponse from(ShiftMatch m) {
-        return from(m, null, null, null, null, null, null);
+        return from(m, null, null, null, null, null, null, 0);
     }
 
     public static MatchResponse from(ShiftMatch m, Boolean ownerRatedWorker, Boolean workerRatedOwner) {
-        return from(m, ownerRatedWorker, workerRatedOwner, null, null, null, null);
+        return from(m, ownerRatedWorker, workerRatedOwner, null, null, null, null, 0);
     }
 
     public static MatchResponse from(ShiftMatch m,
@@ -43,6 +45,18 @@ public record MatchResponse(
                                      LocalDateTime payoutApprovedAt,
                                      Boolean payoutAutoApproved,
                                      LocalDateTime payoutCompletedAt) {
+        return from(m, ownerRatedWorker, workerRatedOwner,
+                payoutStatus, payoutApprovedAt, payoutAutoApproved, payoutCompletedAt, 0);
+    }
+
+    public static MatchResponse from(ShiftMatch m,
+                                     Boolean ownerRatedWorker,
+                                     Boolean workerRatedOwner,
+                                     String payoutStatus,
+                                     LocalDateTime payoutApprovedAt,
+                                     Boolean payoutAutoApproved,
+                                     LocalDateTime payoutCompletedAt,
+                                     long chatUnreadCount) {
         var shift = m.getShift();
         var cafe = shift.getCafe();
         return new MatchResponse(
@@ -65,7 +79,8 @@ public record MatchResponse(
                 payoutStatus,
                 payoutApprovedAt,
                 payoutAutoApproved,
-                payoutCompletedAt
+                payoutCompletedAt,
+                chatUnreadCount
         );
     }
 }

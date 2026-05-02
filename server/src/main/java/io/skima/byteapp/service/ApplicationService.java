@@ -24,6 +24,7 @@ public class ApplicationService {
     private final ShiftService shiftService;
     private final ShiftApplicationRepository applicationRepository;
     private final ShiftMatchRepository matchRepository;
+    private final PushNotificationService pushService;
 
     /** 워커의 1탭 지원 */
     @Transactional
@@ -44,7 +45,22 @@ public class ApplicationService {
                 .shift(shift)
                 .worker(worker)
                 .build();
-        return applicationRepository.save(app);
+        var saved = applicationRepository.save(app);
+
+        // 점주에게 푸시 — 새 지원자 도착
+        pushService.sendToUser(
+                shift.getCafe().getOwner(),
+                "새 지원자 — " + worker.getName(),
+                shift.getCafe().getName() + " · " + fmtTime(shift.getStartAt()),
+                "/owner/shift/" + shift.getId());
+
+        return saved;
+    }
+
+    private static String fmtTime(LocalDateTime t) {
+        if (t == null) return "";
+        return String.format("%02d/%02d %02d:%02d",
+                t.getMonthValue(), t.getDayOfMonth(), t.getHour(), t.getMinute());
     }
 
     /** 점주의 지원자 확정 — 매칭 SLA 측정 시점 */
@@ -94,7 +110,16 @@ public class ApplicationService {
                 .shift(shift)
                 .worker(app.getWorker())
                 .build();
-        return matchRepository.save(match);
+        var saved = matchRepository.save(match);
+
+        // 워커에게 푸시 — 매칭 확정
+        pushService.sendToUser(
+                app.getWorker(),
+                "✅ 매칭 확정 — " + shift.getCafe().getName(),
+                fmtTime(shift.getStartAt()) + " 시작 · 시급 ₩" + String.format("%,d", shift.getHourlyWage()),
+                "/worker/matches?focus=" + saved.getId());
+
+        return saved;
     }
 
     private static final int BUFFER_HOURS = 1;

@@ -1,11 +1,12 @@
 import { useCallback, useMemo, useState } from 'react';
 import { Alert, FlatList, Platform, Pressable, RefreshControl, ScrollView, Text, TextInput, View } from 'react-native';
-import { router, useFocusEffect } from 'expo-router';
+import { router } from 'expo-router';
 
 import { Icon } from '@/components/Icon';
 import { RatingModal, blurFocusedForModal } from '@/components/RatingModal';
 import ShiftSkillBadges from '@/components/ShiftSkillBadges';
 import { api } from '@/lib/api';
+import { useFocusPolling } from '@/lib/useFocusPolling';
 import {
   CafeStats,
   OwnerDashboard,
@@ -72,9 +73,7 @@ export default function OwnerShiftsScreen() {
     }
   }, []);
 
-  useFocusEffect(useCallback(() => {
-    load();
-  }, [load]));
+  useFocusPolling(load, 15000);
 
   function notify(msg: string) {
     if (Platform.OS === 'web') window.alert(msg);
@@ -150,13 +149,14 @@ export default function OwnerShiftsScreen() {
       ListHeaderComponent={
         <View>
           <DashboardHeader dash={dash} />
+          <TodayWidgets shifts={shifts} />
           <CafeStatsRow stats={cafeStats} />
           {/* 필터 + 검색 — 카드 4개와 1:1 매핑 */}
           <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
             <FilterChip label="전체" active={filter === 'ALL'} onPress={() => setFilter('ALL')} />
             <FilterChip label="모집중" active={filter === 'OPEN'} onPress={() => setFilter('OPEN')} />
             <FilterChip label="매칭완료" active={filter === 'MATCHED'} onPress={() => setFilter('MATCHED')} />
-            <FilterChip label="진행중" active={filter === 'IN_PROGRESS'} onPress={() => setFilter('IN_PROGRESS')} />
+            <FilterChip label="근무중" active={filter === 'IN_PROGRESS'} onPress={() => setFilter('IN_PROGRESS')} />
             <FilterChip label="완료" active={filter === 'COMPLETED'} onPress={() => setFilter('COMPLETED')} count={needsRatingCount} />
           </View>
           <View style={{ position: 'relative', marginBottom: 16 }}>
@@ -319,7 +319,7 @@ function DashboardHeader({ dash }: { dash: OwnerDashboard | null }) {
           onPress={() => router.push('/owner/dashboard/matched' as never)}
         />
         <StatCard
-          label="진행중"
+          label="근무중"
           value={dash?.inProgressShifts ?? 0}
           accent={colors.primary}
           bg={colors.primarySoft}
@@ -443,19 +443,112 @@ function StatCard({
   );
 }
 
+function TodayWidgets({ shifts }: { shifts: OwnerShift[] }) {
+  const now = Date.now();
+  const startOfToday = new Date();
+  startOfToday.setHours(0, 0, 0, 0);
+  const endOfToday = startOfToday.getTime() + 24 * 3600 * 1000;
+
+  const todayShifts = shifts.filter((s) => {
+    const t = new Date(s.startAt).getTime();
+    return t >= startOfToday.getTime() && t < endOfToday;
+  });
+  const todayMatched = todayShifts.filter((s) => s.matchId != null).length;
+  const todayInProgress = shifts.filter((s) => s.status === 'IN_PROGRESS').length;
+
+  // SLA 임박: OPEN + 등록 30분+ 매칭 안 된 것
+  const slaWarn = shifts.filter((s) => {
+    if (s.status !== 'OPEN') return false;
+    if (!s.createdAt) return false;
+    const minutesAgo = (now - new Date(s.createdAt).getTime()) / 60000;
+    return minutesAgo > 30;
+  });
+
+  if (todayShifts.length === 0 && slaWarn.length === 0 && todayInProgress === 0) {
+    return null; // 아무것도 없으면 위젯 영역 자체 숨김
+  }
+
+  return (
+    <View style={{ marginBottom: spacing.lg, flexDirection: 'row', gap: 8 }}>
+      <Pressable
+        onPress={() => router.push('/owner/dashboard/in-progress' as never)}
+        style={({ pressed }) => [
+          {
+            flex: 1,
+            padding: 14,
+            borderRadius: radius.md,
+            backgroundColor: todayInProgress > 0 ? colors.primary : colors.surface,
+            borderWidth: 1,
+            borderColor: todayInProgress > 0 ? colors.primary : colors.border,
+          },
+          pressed && { opacity: 0.85 },
+        ]}
+      >
+        <Text style={{ fontSize: 11, fontWeight: '800', color: todayInProgress > 0 ? 'rgba(255,255,255,0.85)' : colors.textMuted }}>
+          오늘 · 근무중
+        </Text>
+        <Text style={{ fontSize: 22, fontWeight: '900', color: todayInProgress > 0 ? '#fff' : colors.text, marginTop: 4 }}>
+          {todayInProgress}건
+        </Text>
+        <Text style={{ fontSize: 10, color: todayInProgress > 0 ? 'rgba(255,255,255,0.85)' : colors.textMuted, marginTop: 2 }}>
+          오늘 시작 시프트 {todayShifts.length}건 / 매칭 {todayMatched}건
+        </Text>
+      </Pressable>
+
+      <Pressable
+        onPress={() => router.push('/owner/dashboard/open' as never)}
+        style={({ pressed }) => [
+          {
+            flex: 1,
+            padding: 14,
+            borderRadius: radius.md,
+            backgroundColor: slaWarn.length > 0 ? colors.warnSoft : colors.surface,
+            borderWidth: 1,
+            borderColor: slaWarn.length > 0 ? colors.warn : colors.border,
+          },
+          pressed && { opacity: 0.85 },
+        ]}
+      >
+        <Text style={{ fontSize: 11, fontWeight: '800', color: slaWarn.length > 0 ? colors.warn : colors.textMuted }}>
+          ⏱️ SLA 임박
+        </Text>
+        <Text
+          style={{
+            fontSize: 22,
+            fontWeight: '900',
+            color: slaWarn.length > 0 ? colors.warn : colors.text,
+            marginTop: 4,
+          }}
+        >
+          {slaWarn.length}건
+        </Text>
+        <Text style={{ fontSize: 10, color: colors.textMuted, marginTop: 2 }}>
+          {slaWarn.length > 0
+            ? '등록 30분+ 매칭 안 됨 — 빨리 확인'
+            : '모든 시프트 정상 진행 중'}
+        </Text>
+      </Pressable>
+    </View>
+  );
+}
+
 function CafeStatsRow({ stats }: { stats: CafeStats[] }) {
   if (!stats || stats.length === 0) return null;
+  // 이번달 매칭 많은 순으로 정렬 (점주가 자주 쓰는 매장 자연 우선)
+  const sorted = [...stats].sort(
+    (a, b) => (b.monthCompletedMatches ?? 0) - (a.monthCompletedMatches ?? 0),
+  );
   return (
     <View style={{ marginBottom: spacing.lg }}>
       <Text style={[styles.subtitle, { fontWeight: '700', marginBottom: 8 }]}>
-        매장별 이번달 요약
+        매장별 이번달 요약 (활동 많은 순)
       </Text>
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={{ gap: 10, paddingRight: 16 }}
       >
-        {stats.map((c) => {
+        {sorted.map((c) => {
           const ratingPct = c.avgRating != null ? c.avgRating / 5 : 0;
           const noShowPct = c.noShowRate != null ? c.noShowRate : 0;
           const thisTotal = c.monthGross + c.monthFee;

@@ -58,7 +58,7 @@ export default function WorkerPayoutsScreen() {
           <View style={styles.card}>
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
               <Pressable
-                style={({ pressed }) => [{ flex: 1 }, pressed && item.cafeId && { opacity: 0.7 }]}
+                style={({ pressed }) => [{ flex: 1 }, pressed && item.cafeId ? { opacity: 0.7 } : null]}
                 onPress={() => item.cafeId && router.push(`/cafe/${item.cafeId}` as never)}
                 disabled={!item.cafeId}
               >

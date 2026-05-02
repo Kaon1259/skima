@@ -15,16 +15,18 @@ export const API_BASE_URL =
 export const KAKAO_REST_API_KEY = '08895d0f24c6adbdff9c85ee84469e88';
 
 // 콜백 URL — Kakao Developers 콘솔의 redirect URI 에 반드시 등록되어 있어야 함
+// Web: http://localhost:8081/auth/kakao/callback (개발) — 운영은 도메인 등록 필요
+// Native: skima://auth/kakao/callback (Expo deep-link)
 export const KAKAO_REDIRECT_URI =
   Platform.OS === 'web'
     ? 'http://localhost:8081/auth/kakao/callback'
-    : `http://${LAN_HOST}:8081/auth/kakao/callback`;
+    : 'skima://auth/kakao/callback';
 
-export function buildKakaoAuthorizeUrl(): string {
+export function buildKakaoAuthorizeUrl(redirectUri?: string): string {
   const params = new URLSearchParams({
     response_type: 'code',
     client_id: KAKAO_REST_API_KEY,
-    redirect_uri: KAKAO_REDIRECT_URI,
+    redirect_uri: redirectUri ?? KAKAO_REDIRECT_URI,
   });
   return `https://kauth.kakao.com/oauth/authorize?${params.toString()}`;
 }

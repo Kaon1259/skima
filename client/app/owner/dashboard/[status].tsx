@@ -1,9 +1,11 @@
 import { useCallback, useMemo, useState } from 'react';
 import { Alert, FlatList, Platform, Pressable, RefreshControl, Text, View } from 'react-native';
-import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 
 import { Icon } from '@/components/Icon';
+import ShiftSkillBadges from '@/components/ShiftSkillBadges';
 import { api } from '@/lib/api';
+import { useFocusPolling } from '@/lib/useFocusPolling';
 import { OwnerShift, fmtDateTime, fmtKRW, fmtRelativeMinutes } from '@/lib/types';
 import { colors, radius, spacing, statusVisual, styles } from '@/lib/theme';
 
@@ -37,7 +39,7 @@ const META: Record<Status, {
     sort: (a, b) => (a.startAt ?? '').localeCompare(b.startAt ?? ''),
   },
   'in-progress': {
-    title: '진행중 시프트',
+    title: '근무중 시프트',
     subtitle: '현재 근무 중 — 실시간 상태',
     emptyEmoji: '☕',
     emptyText: '근무 중인 시프트가 없어요',
@@ -75,9 +77,7 @@ export default function DashboardStatusScreen() {
     }
   }, []);
 
-  useFocusEffect(useCallback(() => {
-    load();
-  }, [load]));
+  useFocusPolling(load, 15000);
 
   const filtered = useMemo(() => shifts.filter(meta.filter).sort(meta.sort), [shifts, meta]);
 
@@ -218,6 +218,13 @@ function DashboardShiftCard({ shift, status }: { shift: OwnerShift; status: Stat
           <Text style={[styles.badgeText, { color: v.fg }]}>{v.label}</Text>
         </View>
       </View>
+
+      <ShiftSkillBadges
+        jobRole={shift.jobRole}
+        minSkill={shift.minSkill}
+        requirements={shift.requirements}
+        compact
+      />
 
       {/* status별 hot 정보 */}
       {status === 'open' ? (

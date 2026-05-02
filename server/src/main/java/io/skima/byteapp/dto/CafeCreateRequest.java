@@ -9,6 +9,8 @@ public record CafeCreateRequest(
         @NotBlank @Size(max = 128) String name,
         @NotBlank @Size(max = 256) String address,
         @NotNull CafeType cafeType,
-        String brandKey
+        String brandKey,
+        Double latitude,
+        Double longitude
 ) {
 }
