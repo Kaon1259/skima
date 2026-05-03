@@ -13,7 +13,12 @@ public record CafeResponse(
         String brandColor,
         String brandName,
         Double latitude,
-        Double longitude
+        Double longitude,
+        String openHours,
+        Integer seatCount,
+        String phone,
+        String description,
+        String imageUrl
 ) {
     public static CafeResponse from(Cafe c, BrandResponse brand) {
         return new CafeResponse(
@@ -26,7 +31,12 @@ public record CafeResponse(
                 brand != null ? brand.color() : null,
                 brand != null ? brand.name() : null,
                 c.getLatitude(),
-                c.getLongitude()
+                c.getLongitude(),
+                c.getOpenHours(),
+                c.getSeatCount(),
+                c.getPhone(),
+                c.getDescription(),
+                c.getImageUrl()
         );
     }
 

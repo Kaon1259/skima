@@ -39,6 +39,11 @@ application-local.yml
 application-local.yaml
 application-local.properties
 application-secret.yml
+*_카카오.txt
+*_kakao.txt
+AWS_*.txt
+aws_*.txt
+secrets/
 
 # --- Claude / agent local state ---
 .claude/

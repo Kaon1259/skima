@@ -30,6 +30,7 @@ public class ShiftService {
     private final ShiftApplicationRepository applicationRepository;
     private final io.skima.byteapp.repository.WorkerFavoriteCafeRepository workerFavoriteCafeRepository;
     private final io.skima.byteapp.repository.UserRepository userRepository;
+    private final io.skima.byteapp.repository.RatingRepository ratingRepository;
     private final PushNotificationService pushService;
 
     @Transactional
@@ -46,6 +47,10 @@ public class ShiftService {
             throw BusinessException.badRequest("종료시각은 시작시각보다 이후여야 합니다");
         }
 
+        java.time.LocalDateTime favOnlyUntil = null;
+        if (req.favoritesOnlyMinutes() != null && req.favoritesOnlyMinutes() > 0) {
+            favOnlyUntil = java.time.LocalDateTime.now().plusMinutes(req.favoritesOnlyMinutes());
+        }
         Shift shift = Shift.builder()
                 .cafe(cafe)
                 .startAt(req.startAt())
@@ -56,18 +61,34 @@ public class ShiftService {
                 .jobRole(req.jobRole())
                 .minSkill(req.minSkill())
                 .requirements(req.requirements())
+                .favoritesOnlyUntil(favOnlyUntil)
                 .build();
         var saved = shiftRepository.save(shift);
 
-        // 단골 워커들에게 푸시 — 즐겨찾기 매장 새 시프트
+        // 단골 워커들에게 푸시 — 즐겨찾기 매장 새 시프트 (워커 prefs 통과한 워커만)
         var favWorkerIds = workerFavoriteCafeRepository.findWorkerIdsByCafeId(cafe.getId());
         if (!favWorkerIds.isEmpty()) {
-            var favWorkers = userRepository.findAllById(favWorkerIds);
-            pushService.sendToUsers(
-                    favWorkers,
-                    "⭐ " + cafe.getName() + " 새 시프트",
-                    fmtPushTime(saved.getStartAt()) + " 시작 · 시급 ₩" + String.format("%,d", saved.getHourlyWage()),
-                    "/cafe/" + cafe.getId());
+            // 매장 평판 시그널 (단골 면제하더라도 일관성 위해 prefsAcceptShift 호출 시 인자로 사용)
+            var ratings = ratingRepository.findAllByCafeIdAndDirection(
+                    cafe.getId(), io.skima.byteapp.domain.RatingDirection.WORKER_TO_OWNER);
+            Double avgRating = ratings.isEmpty() ? null
+                    : ratings.stream().mapToInt(io.skima.byteapp.domain.Rating::getScore).average().orElse(0);
+            var allMatches = matchRepository.findAllByCafeId(cafe.getId());
+            Double noShowRate = allMatches.isEmpty() ? null
+                    : (double) allMatches.stream()
+                            .filter(m -> m.getStatus() == io.skima.byteapp.domain.MatchStatus.NO_SHOW)
+                            .count() / allMatches.size();
+            // 워커별로 prefs 통과 체크 (단골이면 면제 — true 통과)
+            var favWorkers = userRepository.findAllById(favWorkerIds).stream()
+                    .filter(u -> u.prefsAcceptShift(saved.getHourlyWage(), avgRating, noShowRate, true))
+                    .toList();
+            if (!favWorkers.isEmpty()) {
+                pushService.sendToUsers(
+                        favWorkers,
+                        "⭐ " + cafe.getName() + " 새 시프트",
+                        fmtPushTime(saved.getStartAt()) + " 시작 · 시급 ₩" + String.format("%,d", saved.getHourlyWage()),
+                        "/cafe/" + cafe.getId());
+            }
         }
 
         return saved;

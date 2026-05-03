@@ -28,7 +28,7 @@ export default function IndexSplash() {
     const t = setTimeout(() => {
       if (!auth) router.replace('/login');
       else if (auth.role === 'OWNER') router.replace('/owner/shifts');
-      else if (auth.role === 'WORKER') router.replace('/worker/home');
+      else if (auth.role === 'WORKER') router.replace('/worker/shifts');
       else router.replace('/admin/kpi');
     }, 900);
     return () => clearTimeout(t);

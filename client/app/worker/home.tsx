@@ -346,8 +346,38 @@ export default function WorkerHomeScreen() {
         </View>
       ) : null}
 
+      {/* 내 프로필 — 풀 너비 강조 */}
+      <Pressable
+        onPress={() => router.push('/worker/profile' as never)}
+        style={({ pressed }) => [
+          {
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 12,
+            padding: 14,
+            borderRadius: radius.md,
+            backgroundColor: colors.surface,
+            borderWidth: 1.5,
+            borderColor: colors.primary,
+            marginTop: spacing.lg,
+          },
+          pressed && { opacity: 0.85 },
+        ]}
+      >
+        <Text style={{ fontSize: 22 }}>⚙️</Text>
+        <View style={{ flex: 1 }}>
+          <Text style={{ fontSize: 14, fontWeight: '800', color: colors.primaryDark }}>
+            내 프로필 관리
+          </Text>
+          <Text style={{ fontSize: 11, color: colors.textMuted, marginTop: 2 }}>
+            등급·직무·자격 + 자기소개·경력·가능시간대
+          </Text>
+        </View>
+        <Text style={{ fontSize: 16, color: colors.primary }}>›</Text>
+      </Pressable>
+
       {/* 빠른 진입 */}
-      <View style={{ flexDirection: 'row', gap: 8, marginTop: spacing.lg }}>
+      <View style={{ flexDirection: 'row', gap: 8, marginTop: spacing.md }}>
         <Pressable
           onPress={() => router.push('/worker/shifts' as never)}
           style={({ pressed }) => [
@@ -382,6 +412,18 @@ export default function WorkerHomeScreen() {
           <Text style={{ fontSize: 22 }}>💰</Text>
           <Text style={{ fontSize: 12, fontWeight: '800', color: colors.success, marginTop: 4 }}>
             정산
+          </Text>
+        </Pressable>
+        <Pressable
+          onPress={() => router.push('/worker/documents' as never)}
+          style={({ pressed }) => [
+            { flex: 1, padding: 14, borderRadius: radius.md, backgroundColor: colors.warnSoft, alignItems: 'center' },
+            pressed && { opacity: 0.85 },
+          ]}
+        >
+          <Text style={{ fontSize: 22 }}>📄</Text>
+          <Text style={{ fontSize: 12, fontWeight: '800', color: colors.warn, marginTop: 4 }}>
+            내 문서
           </Text>
         </Pressable>
       </View>

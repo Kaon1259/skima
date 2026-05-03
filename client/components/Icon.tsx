@@ -37,6 +37,7 @@ const MAP: Record<string, string> = {
   filter: '⚙️',
   star: '★',
   home: '🏠',
+  user: '👤',
 };
 
 export type IconName = keyof typeof MAP | string;

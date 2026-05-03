@@ -30,4 +30,17 @@ public interface ShiftRepository extends JpaRepository<Shift, Long> {
               and TIMESTAMPDIFF(MINUTE, created_at, matched_at) <= :slaMinutes
             """, nativeQuery = true)
     long countMatchedWithinSlaSince(@Param("since") LocalDateTime since, @Param("slaMinutes") int slaMinutes);
+
+    /** 같은 매장에서 시작/종료 시간이 [start, end] 와 겹치는 시프트 (CANCELED 제외) — 중복 등록 방지용 */
+    @Query("""
+            select s from Shift s
+            where s.cafe.id = :cafeId
+              and s.status <> io.skima.byteapp.domain.ShiftStatus.CANCELED
+              and s.startAt < :end
+              and s.endAt > :start
+            order by s.startAt asc
+            """)
+    List<Shift> findOverlapping(@Param("cafeId") Long cafeId,
+                                 @Param("start") LocalDateTime start,
+                                 @Param("end") LocalDateTime end);
 }

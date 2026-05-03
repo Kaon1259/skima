@@ -2,12 +2,16 @@ import { useCallback, useMemo, useState } from 'react';
 import { Alert, FlatList, Platform, Pressable, RefreshControl, ScrollView, Text, TextInput, View } from 'react-native';
 import { router } from 'expo-router';
 
+import { EmptyState } from '@/components/EmptyState';
 import { Icon } from '@/components/Icon';
 import { RatingModal, blurFocusedForModal } from '@/components/RatingModal';
 import ShiftSkillBadges from '@/components/ShiftSkillBadges';
+import { SkeletonList } from '@/components/Skeleton';
 import { api } from '@/lib/api';
+import { usePinnedCafes } from '@/lib/pinnedCafes';
 import { useFocusPolling } from '@/lib/useFocusPolling';
 import {
+  Cafe,
   CafeStats,
   OwnerDashboard,
   OwnerShift,
@@ -22,11 +26,14 @@ export default function OwnerShiftsScreen() {
   const [shifts, setShifts] = useState<OwnerShift[]>([]);
   const [dash, setDash] = useState<OwnerDashboard | null>(null);
   const [cafeStats, setCafeStats] = useState<CafeStats[]>([]);
+  const [cafes, setCafes] = useState<Cafe[]>([]);
   const [refreshing, setRefreshing] = useState(false);
+  const [initialLoaded, setInitialLoaded] = useState(false);
   const [busyId, setBusyId] = useState<number | null>(null);
   const [ratingTarget, setRatingTarget] = useState<{ matchId: number; workerName: string } | null>(null);
   const [filter, setFilter] = useState<'ALL' | 'OPEN' | 'MATCHED' | 'IN_PROGRESS' | 'COMPLETED'>('ALL');
   const [query, setQuery] = useState('');
+  const { pinned: pinnedCafes, toggle: togglePinCafe } = usePinnedCafes();
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -57,19 +64,22 @@ export default function OwnerShiftsScreen() {
   const load = useCallback(async () => {
     setRefreshing(true);
     try {
-      const [shiftData, dashData, byCafe] = await Promise.all([
+      const [shiftData, dashData, byCafe, myCafes] = await Promise.all([
         api<OwnerShift[]>('/api/owner/shifts'),
         api<OwnerDashboard>('/api/owner/dashboard'),
         api<CafeStats[]>('/api/owner/dashboard/by-cafe'),
+        api<Cafe[]>('/api/owner/cafes').catch(() => [] as Cafe[]),
       ]);
       setShifts(shiftData);
       setDash(dashData);
       setCafeStats(byCafe);
+      setCafes(myCafes);
     } catch (e) {
       const msg = (e as Error).message;
       Platform.OS === 'web' ? window.alert(msg) : Alert.alert('오류', msg);
     } finally {
       setRefreshing(false);
+      setInitialLoaded(true);
     }
   }, []);
 
@@ -148,9 +158,21 @@ export default function OwnerShiftsScreen() {
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={load} tintColor={colors.primary} />}
       ListHeaderComponent={
         <View>
-          <DashboardHeader dash={dash} />
-          <TodayWidgets shifts={shifts} />
-          <CafeStatsRow stats={cafeStats} />
+          {/* 신규 점주 (매장 1 이하 AND 시프트 1 이하) — OnboardingSteps 노출 */}
+          {initialLoaded && cafes.length <= 1 && shifts.length <= 1 ? (
+            <OnboardingSteps cafesCount={cafes.length} shiftsCount={shifts.length} />
+          ) : null}
+          {/* 활성 점주 (매장 2+ 또는 시프트 2+) — 위젯/카드/필터 노출 */}
+          {(cafes.length >= 2 || shifts.length >= 2) ? (
+            <>
+              <DashboardHeader dash={dash} shifts={shifts} />
+              <TodayWidgets shifts={shifts} />
+              <CafeStatsRow stats={cafeStats} pinned={pinnedCafes} onTogglePin={togglePinCafe} />
+            </>
+          ) : null}
+          {/* 활성 점주만 필터·검색·빠른진입 표시 */}
+          {(cafes.length >= 2 || shifts.length >= 2) ? (
+            <>
           {/* 필터 + 검색 — 카드 4개와 1:1 매핑 */}
           <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
             <FilterChip label="전체" active={filter === 'ALL'} onPress={() => setFilter('ALL')} />
@@ -213,25 +235,41 @@ export default function OwnerShiftsScreen() {
               <Text style={{ fontSize: 14 }}>👥</Text>
               <Text style={{ fontSize: 12, fontWeight: '700', color: colors.text }}>워커 풀</Text>
             </Pressable>
+            <Pressable
+              onPress={() => router.push('/owner/shift-templates')}
+              style={({ pressed }) => [
+                {
+                  flex: 1,
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 6,
+                  paddingVertical: 10,
+                  borderRadius: radius.md,
+                  borderWidth: 1,
+                  borderColor: colors.border,
+                  backgroundColor: colors.surface,
+                },
+                pressed && { opacity: 0.7 },
+              ]}
+            >
+              <Text style={{ fontSize: 14 }}>🗓️</Text>
+              <Text style={{ fontSize: 12, fontWeight: '700', color: colors.text }}>템플릿</Text>
+            </Pressable>
           </View>
           {filtered.length === 0 && shifts.length > 0 ? (
             <View style={{ paddingVertical: 24, alignItems: 'center' }}>
               <Text style={styles.bodyMuted}>조건에 맞는 시프트가 없어요</Text>
             </View>
           ) : null}
+            </>
+          ) : null}
         </View>
       }
       ListEmptyComponent={
-        <View style={{ paddingTop: 40, alignItems: 'center' }}>
-          <Text style={{ fontSize: 36, marginBottom: 8 }}>📋</Text>
-          <Text style={styles.bodyMuted}>등록된 시프트가 없어요</Text>
-          <Pressable
-            style={[styles.buttonPrimary, { marginTop: 16, paddingHorizontal: 24 }]}
-            onPress={() => router.push('/owner/new-shift')}
-          >
-            <Text style={styles.buttonPrimaryText}>첫 시프트 등록하기</Text>
-          </Pressable>
-        </View>
+        !initialLoaded ? (
+          <SkeletonList count={3} />
+        ) : null
       }
       renderItem={({ item }) => (
         <ShiftCard
@@ -258,6 +296,176 @@ export default function OwnerShiftsScreen() {
         />
       }
     />
+  );
+}
+
+function OnboardingSteps({ cafesCount, shiftsCount }: { cafesCount: number; shiftsCount: number }) {
+  const step1Done = cafesCount > 0;
+  const step2Done = shiftsCount > 0;
+  const allDone = step1Done && step2Done;
+  return (
+    <View style={{ marginBottom: spacing.lg }}>
+      <Text style={[styles.h2, { marginBottom: 4 }]}>
+        {allDone ? '🎉 잘 시작했어요!' : '👋 환영합니다'}
+      </Text>
+      <Text style={[styles.subtitle, { marginBottom: 16 }]}>
+        {allDone
+          ? '워커 매칭을 기다리는 중 — 추가 등록·운영 도구도 준비되어 있어요'
+          : '2단계만 끝내면 워커 매칭이 시작돼요'}
+      </Text>
+
+      {/* 1단계: 매장 등록 */}
+      <Pressable
+        onPress={() => router.push('/owner/cafes?autoCreate=1')}
+        disabled={step1Done}
+        style={({ pressed }) => [
+          {
+            padding: 16,
+            borderRadius: radius.lg,
+            backgroundColor: step1Done ? colors.successSoft : colors.surface,
+            borderWidth: 1.5,
+            borderColor: step1Done ? colors.success : colors.primary,
+            marginBottom: 10,
+          },
+          pressed && { opacity: 0.85 },
+        ]}
+      >
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+          <View
+            style={{
+              width: 32, height: 32, borderRadius: 16,
+              backgroundColor: step1Done ? colors.success : colors.primary,
+              alignItems: 'center', justifyContent: 'center',
+            }}
+          >
+            <Text style={{ color: '#fff', fontWeight: '900', fontSize: 14 }}>
+              {step1Done ? '✓' : '1'}
+            </Text>
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={{ fontSize: 14, fontWeight: '800', color: colors.text }}>
+              매장 등록
+            </Text>
+            <Text style={{ fontSize: 11, color: colors.textMuted, marginTop: 2 }}>
+              {step1Done ? `${cafesCount}개 매장 등록 완료` : '브랜드 카탈로그에서 골라 매장 정보 입력'}
+            </Text>
+          </View>
+          {step1Done ? (
+            <Text style={{ fontSize: 11, fontWeight: '800', color: colors.success }}>완료</Text>
+          ) : (
+            <Text style={{ fontSize: 16, color: colors.primary }}>›</Text>
+          )}
+        </View>
+      </Pressable>
+
+      {/* 2단계: 시프트 등록 */}
+      <Pressable
+        onPress={() => step1Done && !step2Done && router.push('/owner/new-shift')}
+        disabled={!step1Done || step2Done}
+        style={({ pressed }) => [
+          {
+            padding: 16,
+            borderRadius: radius.lg,
+            backgroundColor: step2Done ? colors.successSoft : (!step1Done ? colors.surfaceMuted : colors.surface),
+            borderWidth: 1.5,
+            borderColor: step2Done ? colors.success : (step1Done ? colors.primary : colors.border),
+            marginBottom: 10,
+            opacity: step1Done ? 1 : 0.6,
+          },
+          pressed && { opacity: 0.85 },
+        ]}
+      >
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+          <View
+            style={{
+              width: 32, height: 32, borderRadius: 16,
+              backgroundColor: step2Done ? colors.success : (step1Done ? colors.primary : colors.textLight),
+              alignItems: 'center', justifyContent: 'center',
+            }}
+          >
+            <Text style={{ color: '#fff', fontWeight: '900', fontSize: 14 }}>
+              {step2Done ? '✓' : '2'}
+            </Text>
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={{ fontSize: 14, fontWeight: '800', color: colors.text }}>
+              첫 시프트 등록
+            </Text>
+            <Text style={{ fontSize: 11, color: colors.textMuted, marginTop: 2 }}>
+              {step2Done
+                ? `${shiftsCount}건 등록 완료 — 워커 지원 대기 중`
+                : (step1Done
+                  ? '시급·직무·요구 자격 입력 → 1시간 매칭 SLA 시작'
+                  : '먼저 매장을 등록해야 시프트를 만들 수 있어요')}
+            </Text>
+          </View>
+          {step2Done ? (
+            <Text style={{ fontSize: 11, fontWeight: '800', color: colors.success }}>완료</Text>
+          ) : (step1Done ? (
+            <Text style={{ fontSize: 16, color: colors.primary }}>›</Text>
+          ) : null)}
+        </View>
+      </Pressable>
+
+      {/* 모든 단계 완료 후 — 다음 액션 안내 */}
+      {allDone ? (
+        <View style={{ marginTop: 4, marginBottom: 4 }}>
+          <Text style={{ fontSize: 11, fontWeight: '800', color: colors.textMuted, marginBottom: 8 }}>
+            다음 액션
+          </Text>
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
+            <NextActionChip emoji="➕" label="시프트 추가" onPress={() => router.push('/owner/new-shift' as never)} />
+            <NextActionChip emoji="🗓️" label="템플릿" onPress={() => router.push('/owner/shift-templates' as never)} />
+            <NextActionChip emoji="🏪" label="매장 추가" onPress={() => router.push('/owner/cafes' as never)} />
+            <NextActionChip emoji="👥" label="워커풀" onPress={() => router.push('/owner/worker-pool' as never)} />
+          </View>
+          <Text style={{ fontSize: 11, color: colors.textLight, marginTop: 10, lineHeight: 16 }}>
+            워커 지원이 들어오면 헤더 종(🔔) 알림과 위 시프트 카드에서 확인할 수 있어요. 워커가 단골 등록한 매장이면 즉시 푸시.
+          </Text>
+        </View>
+      ) : step1Done ? (
+        <Pressable
+          onPress={() => router.push('/owner/cafes')}
+          style={({ pressed }) => [
+            {
+              paddingVertical: 8, alignItems: 'center',
+              borderRadius: radius.md, borderWidth: 1, borderColor: colors.border,
+              backgroundColor: colors.surface,
+            },
+            pressed && { opacity: 0.7 },
+          ]}
+        >
+          <Text style={{ fontSize: 12, fontWeight: '700', color: colors.textMuted }}>
+            + 매장 추가 등록
+          </Text>
+        </Pressable>
+      ) : null}
+    </View>
+  );
+}
+
+function NextActionChip({ emoji, label, onPress }: { emoji: string; label: string; onPress: () => void }) {
+  return (
+    <Pressable
+      onPress={onPress}
+      style={({ pressed }) => [
+        {
+          flexDirection: 'row',
+          alignItems: 'center',
+          gap: 4,
+          paddingHorizontal: 12,
+          paddingVertical: 8,
+          borderRadius: radius.pill,
+          backgroundColor: colors.surface,
+          borderWidth: 1,
+          borderColor: colors.border,
+        },
+        pressed && { opacity: 0.7 },
+      ]}
+    >
+      <Text style={{ fontSize: 13 }}>{emoji}</Text>
+      <Text style={{ fontSize: 12, fontWeight: '700', color: colors.text }}>{label}</Text>
+    </Pressable>
   );
 }
 
@@ -293,7 +501,29 @@ function FilterChip({ label, active, onPress, count }: { label: string; active: 
   );
 }
 
-function DashboardHeader({ dash }: { dash: OwnerDashboard | null }) {
+function DashboardHeader({ dash, shifts }: { dash: OwnerDashboard | null; shifts: OwnerShift[] }) {
+  // 지원 도착한 모집중 시프트 (OPEN + pendingApplications > 0)
+  const openWithApps = shifts.filter((s) => s.status === 'OPEN' && (s.pendingApplicationsCount ?? 0) > 0);
+  const totalPending = openWithApps.reduce((sum, s) => sum + (s.pendingApplicationsCount ?? 0), 0);
+
+  // 채팅 unread 합 (매칭완료/근무중 시프트의 unread 합)
+  const matchedUnread = shifts
+    .filter((s) => (s.status === 'MATCHED' || s.status === 'IN_PROGRESS') && (s.chatUnreadCount ?? 0) > 0)
+    .reduce((sum, s) => sum + (s.chatUnreadCount ?? 0), 0);
+
+  // 평가 대기 (CHECKED_OUT + ratingScore == null)
+  const completedNeedRating = shifts.filter(
+    (s) => s.status === 'COMPLETED' && s.matchStatus === 'CHECKED_OUT' && s.ratingScore == null,
+  ).length;
+
+  function handleOpenPress() {
+    if (openWithApps.length === 1) {
+      router.push(`/owner/shift/${openWithApps[0].id}` as never);
+    } else {
+      router.push('/owner/dashboard/open' as never);
+    }
+  }
+
   return (
     <View style={{ marginBottom: spacing.lg }}>
       <Text style={styles.h2}>점주 대시보드</Text>
@@ -308,7 +538,10 @@ function DashboardHeader({ dash }: { dash: OwnerDashboard | null }) {
           accent={colors.warn}
           bg={colors.warnSoft}
           icon="hourglass-outline"
-          onPress={() => router.push('/owner/dashboard/open' as never)}
+          onPress={handleOpenPress}
+          highlight={totalPending > 0
+            ? `🔥 ${openWithApps.length}건 지원 도착${openWithApps.length === 1 ? ` (${totalPending}명)` : ''}`
+            : undefined}
         />
         <StatCard
           label="매칭완료"
@@ -317,6 +550,7 @@ function DashboardHeader({ dash }: { dash: OwnerDashboard | null }) {
           bg={colors.infoSoft}
           icon="checkmark-circle-outline"
           onPress={() => router.push('/owner/dashboard/matched' as never)}
+          highlight={matchedUnread > 0 ? `💬 채팅 ${matchedUnread}건` : undefined}
         />
         <StatCard
           label="근무중"
@@ -333,6 +567,7 @@ function DashboardHeader({ dash }: { dash: OwnerDashboard | null }) {
           bg={colors.successSoft}
           icon="checkmark-done-outline"
           onPress={() => router.push('/owner/dashboard/completed' as never)}
+          highlight={completedNeedRating > 0 ? `⭐ 평가 ${completedNeedRating}건 대기` : undefined}
         />
       </View>
 
@@ -404,6 +639,7 @@ function StatCard({
   bg,
   icon,
   onPress,
+  highlight,
 }: {
   label: string;
   value: number;
@@ -411,7 +647,9 @@ function StatCard({
   bg: string;
   icon: string;
   onPress?: () => void;
+  highlight?: string;
 }) {
+  const hasHighlight = !!highlight;
   return (
     <Pressable
       onPress={onPress}
@@ -421,15 +659,15 @@ function StatCard({
           flexGrow: 1,
           padding: 14,
           borderRadius: radius.lg,
-          backgroundColor: colors.surface,
-          borderWidth: 1,
-          borderColor: colors.border,
+          backgroundColor: hasHighlight ? bg : colors.surface,
+          borderWidth: hasHighlight ? 1.5 : 1,
+          borderColor: hasHighlight ? accent : colors.border,
         },
         pressed && { opacity: 0.7, borderColor: accent },
       ]}
     >
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-        <View style={{ padding: 6, borderRadius: 8, backgroundColor: bg }}>
+        <View style={{ padding: 6, borderRadius: 8, backgroundColor: hasHighlight ? '#fff' : bg }}>
           <Icon name={icon} size={14} color={accent} />
         </View>
         <Text style={{ fontSize: 12, color: colors.textMuted, fontWeight: '700' }}>{label}</Text>
@@ -439,6 +677,11 @@ function StatCard({
       <Text style={{ fontSize: 26, fontWeight: '900', color: colors.text, marginTop: 6, letterSpacing: -0.5 }}>
         {value}
       </Text>
+      {hasHighlight ? (
+        <Text style={{ fontSize: 11, fontWeight: '800', color: accent, marginTop: 4 }} numberOfLines={1}>
+          {highlight}
+        </Text>
+      ) : null}
     </Pressable>
   );
 }
@@ -532,16 +775,28 @@ function TodayWidgets({ shifts }: { shifts: OwnerShift[] }) {
   );
 }
 
-function CafeStatsRow({ stats }: { stats: CafeStats[] }) {
+function CafeStatsRow({
+  stats,
+  pinned,
+  onTogglePin,
+}: {
+  stats: CafeStats[];
+  pinned: Set<number>;
+  onTogglePin: (cafeId: number) => void;
+}) {
   if (!stats || stats.length === 0) return null;
-  // 이번달 매칭 많은 순으로 정렬 (점주가 자주 쓰는 매장 자연 우선)
-  const sorted = [...stats].sort(
-    (a, b) => (b.monthCompletedMatches ?? 0) - (a.monthCompletedMatches ?? 0),
-  );
+  // ⭐ pin 한 매장 먼저, 그 다음 이번달 매칭 많은 순
+  const sorted = [...stats].sort((a, b) => {
+    const ap = pinned.has(a.cafeId) ? 1 : 0;
+    const bp = pinned.has(b.cafeId) ? 1 : 0;
+    if (ap !== bp) return bp - ap;
+    return (b.monthCompletedMatches ?? 0) - (a.monthCompletedMatches ?? 0);
+  });
+  const hasPinned = sorted.some((c) => pinned.has(c.cafeId));
   return (
     <View style={{ marginBottom: spacing.lg }}>
       <Text style={[styles.subtitle, { fontWeight: '700', marginBottom: 8 }]}>
-        매장별 이번달 요약 (활동 많은 순)
+        매장별 이번달 요약 {hasPinned ? '(⭐ 우선 · 활동 많은 순)' : '(활동 많은 순)'}
       </Text>
       <ScrollView
         horizontal
@@ -573,7 +828,7 @@ function CafeStatsRow({ stats }: { stats: CafeStats[] }) {
               ]}
               onPress={() => router.push(`/cafe/${c.cafeId}` as never)}
             >
-              {/* 헤더: 브랜드 아바타 + 매장명 */}
+              {/* 헤더: 브랜드 아바타 + 매장명 + ⭐ 핀 */}
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                 {c.brandLetter ? (
                   <View
@@ -592,7 +847,19 @@ function CafeStatsRow({ stats }: { stats: CafeStats[] }) {
                 <Text style={{ flex: 1, fontWeight: '800', fontSize: 13, color: colors.text }} numberOfLines={1}>
                   {c.cafeName}
                 </Text>
-                <Icon name="chevron-forward" size={16} color={colors.textLight} />
+                <Pressable
+                  onPress={(e) => {
+                    e.stopPropagation();
+                    onTogglePin(c.cafeId);
+                  }}
+                  hitSlop={8}
+                  style={({ pressed }) => [
+                    { paddingHorizontal: 4, paddingVertical: 2 },
+                    pressed && { opacity: 0.6 },
+                  ]}
+                >
+                  <Text style={{ fontSize: 16 }}>{pinned.has(c.cafeId) ? '⭐' : '☆'}</Text>
+                </Pressable>
               </View>
 
               {/* 이번달 매출 */}

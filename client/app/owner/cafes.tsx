@@ -10,12 +10,15 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import { router, useFocusEffect } from 'expo-router';
+import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
+
+import { Image as ExpoImage } from 'expo-image';
 
 import { Icon } from '@/components/Icon';
 import { blurFocusedForModal } from '@/components/RatingModal';
 import { api, ApiError } from '@/lib/api';
 import { getCurrentCoords } from '@/lib/geolocation';
+import { deleteImage, pickAndUploadImage } from '@/lib/imageUpload';
 import { Brand, Cafe, CafeStats, CafeType, CAFE_TYPE_LABEL, fmtPercent } from '@/lib/types';
 import { colors, radius, spacing, styles } from '@/lib/theme';
 
@@ -29,6 +32,7 @@ const TYPE_OPTIONS: { key: CafeType; label: string; emoji: string }[] = [
 ];
 
 export default function OwnerCafesScreen() {
+  const params = useLocalSearchParams<{ autoCreate?: string }>();
   const [cafes, setCafes] = useState<Cafe[]>([]);
   const [stats, setStats] = useState<Record<number, CafeStats>>({});
   const [q, setQ] = useState('');
@@ -36,6 +40,8 @@ export default function OwnerCafesScreen() {
   const [modalOpen, setModalOpen] = useState(false);
   const [mode, setMode] = useState<Mode>('create');
   const [editId, setEditId] = useState<number | null>(null);
+  const [autoTriggered, setAutoTriggered] = useState(false);
+  const [onboardingMode, setOnboardingMode] = useState(false);
 
   const [cafeType, setCafeType] = useState<CafeType | null>(null);
   const [brand, setBrand] = useState<Brand | null>(null);
@@ -43,6 +49,10 @@ export default function OwnerCafesScreen() {
   const [address, setAddress] = useState('');
   const [latitude, setLatitude] = useState<number | null>(null);
   const [longitude, setLongitude] = useState<number | null>(null);
+  const [openHours, setOpenHours] = useState('');
+  const [seatCount, setSeatCount] = useState('');
+  const [phone, setPhone] = useState('');
+  const [description, setDescription] = useState('');
   const [busy, setBusy] = useState(false);
 
   const load = useCallback(async () => {
@@ -77,6 +87,15 @@ export default function OwnerCafesScreen() {
     load();
   }, [load]));
 
+  // autoCreate=1 쿼리 — OnboardingSteps 1단계에서 진입한 경우 모달 자동 오픈
+  useEffect(() => {
+    if (params.autoCreate === '1' && !autoTriggered) {
+      setAutoTriggered(true);
+      setOnboardingMode(true);
+      openCreate();
+    }
+  }, [params.autoCreate, autoTriggered]);
+
   function notify(msg: string) {
     if (Platform.OS === 'web') window.alert(msg);
     else Alert.alert('안내', msg);
@@ -89,6 +108,10 @@ export default function OwnerCafesScreen() {
     setAddress('');
     setLatitude(null);
     setLongitude(null);
+    setOpenHours('');
+    setSeatCount('');
+    setPhone('');
+    setDescription('');
   }
 
   function openCreate() {
@@ -119,6 +142,10 @@ export default function OwnerCafesScreen() {
     setAddress(cafe.address);
     setLatitude(cafe.latitude ?? null);
     setLongitude(cafe.longitude ?? null);
+    setOpenHours(cafe.openHours ?? '');
+    setSeatCount(cafe.seatCount != null ? String(cafe.seatCount) : '');
+    setPhone(cafe.phone ?? '');
+    setDescription(cafe.description ?? '');
     blurFocusedForModal();
     setModalOpen(true);
   }
@@ -139,6 +166,12 @@ export default function OwnerCafesScreen() {
     }
     setBusy(true);
     try {
+      const seatNum = seatCount.trim() === '' ? null : Number(seatCount);
+      if (seatNum != null && (Number.isNaN(seatNum) || seatNum < 0)) {
+        notify('좌석 수는 0 이상의 숫자여야 합니다');
+        setBusy(false);
+        return;
+      }
       const payload = {
         name: name.trim(),
         address: address.trim(),
@@ -146,6 +179,10 @@ export default function OwnerCafesScreen() {
         brandKey: isFranchise ? brand!.key : null,
         latitude,
         longitude,
+        openHours: openHours.trim() || null,
+        seatCount: seatNum,
+        phone: phone.trim() || null,
+        description: description.trim() || null,
       };
       if (mode === 'edit' && editId != null) {
         await api(`/api/owner/cafes/${editId}`, { method: 'PUT', body: payload });
@@ -155,11 +192,43 @@ export default function OwnerCafesScreen() {
         notify('매장 등록 완료');
       }
       setModalOpen(false);
+      // 온보딩 흐름 — 매장 첫 등록 후 자동으로 시프트 화면(2단계)으로 복귀
+      if (onboardingMode && mode === 'create') {
+        setOnboardingMode(false);
+        router.replace('/owner/shifts');
+        return;
+      }
       await load();
     } catch (e) {
       notify((e as Error).message);
     } finally {
       setBusy(false);
+    }
+  }
+
+  const [busyImageCafeId, setBusyImageCafeId] = useState<number | null>(null);
+  async function handleUploadCafeImage(cafe: Cafe) {
+    setBusyImageCafeId(cafe.id);
+    try {
+      const url = await pickAndUploadImage(`/api/owner/cafes/${cafe.id}/image`);
+      // 로컬 cafes 갱신
+      setCafes((prev) => prev.map((c) => c.id === cafe.id ? { ...c, imageUrl: url } : c));
+    } catch (e) {
+      const msg = (e as Error).message;
+      if (msg !== 'cancelled') notify(msg);
+    } finally {
+      setBusyImageCafeId(null);
+    }
+  }
+  async function handleDeleteCafeImage(cafe: Cafe) {
+    setBusyImageCafeId(cafe.id);
+    try {
+      await deleteImage(`/api/owner/cafes/${cafe.id}/image`);
+      setCafes((prev) => prev.map((c) => c.id === cafe.id ? { ...c, imageUrl: null } : c));
+    } catch (e) {
+      notify((e as Error).message);
+    } finally {
+      setBusyImageCafeId(null);
     }
   }
 
@@ -231,6 +300,21 @@ export default function OwnerCafesScreen() {
             style={({ pressed }) => [styles.card, pressed && { opacity: 0.85 }]}
             onPress={() => router.push(`/cafe/${item.id}` as never)}
           >
+            {/* 매장 사진 (있을 때만) */}
+            {item.imageUrl ? (
+              <ExpoImage
+                source={{ uri: item.imageUrl }}
+                style={{
+                  width: '100%',
+                  height: 120,
+                  borderRadius: radius.md,
+                  marginBottom: 12,
+                  backgroundColor: colors.surfaceMuted,
+                }}
+                contentFit="cover"
+              />
+            ) : null}
+
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
               <BrandAvatar
                 letter={item.brandLetter ?? '☕'}
@@ -260,6 +344,20 @@ export default function OwnerCafesScreen() {
               >
                 <Icon name="create-outline" size={15} color={colors.text} />
                 <Text style={styles.buttonSecondaryText}>편집</Text>
+              </Pressable>
+              <Pressable
+                style={[
+                  styles.buttonSecondary,
+                  { flex: 1, flexDirection: 'row', gap: 6 },
+                  busyImageCafeId === item.id && { opacity: 0.6 },
+                ]}
+                onPress={() => item.imageUrl ? handleDeleteCafeImage(item) : handleUploadCafeImage(item)}
+                disabled={busyImageCafeId === item.id}
+              >
+                <Text style={{ fontSize: 14 }}>{item.imageUrl ? '🗑️' : '📸'}</Text>
+                <Text style={styles.buttonSecondaryText}>
+                  {busyImageCafeId === item.id ? '...' : item.imageUrl ? '사진 삭제' : '사진 추가'}
+                </Text>
               </Pressable>
               <Pressable
                 style={[
@@ -344,8 +442,19 @@ export default function OwnerCafesScreen() {
               longitude={longitude}
               setLatitude={setLatitude}
               setLongitude={setLongitude}
+              openHours={openHours}
+              setOpenHours={setOpenHours}
+              seatCount={seatCount}
+              setSeatCount={setSeatCount}
+              phone={phone}
+              setPhone={setPhone}
+              description={description}
+              setDescription={setDescription}
               busy={busy}
-              onCancel={() => setModalOpen(false)}
+              onCancel={() => {
+                setModalOpen(false);
+                setOnboardingMode(false);
+              }}
               onSubmit={submit}
             />
           </View>
@@ -453,6 +562,14 @@ function RegisterForm({
   longitude,
   setLatitude,
   setLongitude,
+  openHours,
+  setOpenHours,
+  seatCount,
+  setSeatCount,
+  phone,
+  setPhone,
+  description,
+  setDescription,
   busy,
   onCancel,
   onSubmit,
@@ -470,6 +587,14 @@ function RegisterForm({
   longitude: number | null;
   setLatitude: (n: number | null) => void;
   setLongitude: (n: number | null) => void;
+  openHours: string;
+  setOpenHours: (s: string) => void;
+  seatCount: string;
+  setSeatCount: (s: string) => void;
+  phone: string;
+  setPhone: (s: string) => void;
+  description: string;
+  setDescription: (s: string) => void;
   busy: boolean;
   onCancel: () => void;
   onSubmit: () => void;
@@ -674,7 +799,67 @@ function RegisterForm({
         )}
       </View>
 
-      <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>
+      {/* 추가 정보 — 워커가 매장 카드에서 보는 정보 */}
+      <Text style={[styles.subtitle, { marginBottom: 4, fontWeight: '700', marginTop: 4 }]}>
+        매장 추가 정보 (선택)
+      </Text>
+      <Text style={{ fontSize: 11, color: colors.textMuted, marginBottom: 10 }}>
+        워커가 매장 상세 페이지에서 보게 될 정보입니다. 비워두면 노출되지 않습니다.
+      </Text>
+
+      <Text style={{ fontSize: 12, fontWeight: '700', color: colors.textMuted, marginBottom: 4 }}>
+        🕒 영업시간
+      </Text>
+      <TextInput
+        style={styles.input}
+        value={openHours}
+        onChangeText={setOpenHours}
+        placeholder="예: 07:00-22:00 / 평일 08-21 주말 09-22"
+        placeholderTextColor={colors.textLight}
+      />
+
+      <View style={{ flexDirection: 'row', gap: 10 }}>
+        <View style={{ flex: 1 }}>
+          <Text style={{ fontSize: 12, fontWeight: '700', color: colors.textMuted, marginBottom: 4 }}>
+            🪑 좌석 수
+          </Text>
+          <TextInput
+            style={styles.input}
+            value={seatCount}
+            onChangeText={setSeatCount}
+            keyboardType="number-pad"
+            placeholder="예: 24"
+            placeholderTextColor={colors.textLight}
+          />
+        </View>
+        <View style={{ flex: 1 }}>
+          <Text style={{ fontSize: 12, fontWeight: '700', color: colors.textMuted, marginBottom: 4 }}>
+            ☎️ 매장 전화
+          </Text>
+          <TextInput
+            style={styles.input}
+            value={phone}
+            onChangeText={setPhone}
+            keyboardType="phone-pad"
+            placeholder="예: 02-1234-5678"
+            placeholderTextColor={colors.textLight}
+          />
+        </View>
+      </View>
+
+      <Text style={{ fontSize: 12, fontWeight: '700', color: colors.textMuted, marginBottom: 4 }}>
+        📝 매장 소개 (워커에게 어필 — 손님유형/POS/식사휴게/유의사항 등)
+      </Text>
+      <TextInput
+        style={[styles.input, { minHeight: 80, textAlignVertical: 'top' }]}
+        value={description}
+        onChangeText={setDescription}
+        placeholder="예: 회전형 매장, POS는 OKPOS, 식사 30분 제공. 라떼아트 가능자 환영"
+        placeholderTextColor={colors.textLight}
+        multiline
+      />
+
+      <View style={{ flexDirection: 'row', gap: 8, marginTop: 16 }}>
         <Pressable
           style={[styles.buttonSecondary, { flex: 1 }]}
           onPress={onCancel}

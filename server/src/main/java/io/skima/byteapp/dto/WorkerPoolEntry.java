@@ -18,6 +18,7 @@ public record WorkerPoolEntry(
         Double rehireRateByOwner,    // 내가 willRehire=true 비율 (재고용 의향)
         LocalDateTime lastMatchAt,   // 가장 최근 매칭 시각
         String lastCafeName,         // 가장 최근 일한 매장명
-        Long lastCafeId
+        Long lastCafeId,
+        Integer trustScore           // 글로벌 종합 신뢰도 점수 (0~100, null=신규)
 ) {
 }

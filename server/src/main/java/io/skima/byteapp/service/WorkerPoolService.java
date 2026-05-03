@@ -68,6 +68,9 @@ public class WorkerPoolService {
         for (Aggregate a : byWorker.values()) {
             Double avg = a.ratingsCount > 0 ? (double) a.ratingSum / a.ratingsCount : null;
             Double rehire = a.ratingsCount > 0 ? (double) a.rehireCount / a.ratingsCount : null;
+            Double noShowRate = a.totalMatches > 0 ? (double) a.noShowCount / a.totalMatches : null;
+            Integer trustScore = io.skima.byteapp.dto.WorkerStatsResponse
+                    .computeTrustScore(a.completedMatches, avg, rehire, noShowRate);
             result.add(new WorkerPoolEntry(
                     a.worker.getId(),
                     a.worker.getName(),
@@ -80,7 +83,8 @@ public class WorkerPoolService {
                     rehire,
                     a.lastMatchAt,
                     a.lastCafeName,
-                    a.lastCafeId
+                    a.lastCafeId,
+                    trustScore
             ));
         }
         // 기본 정렬: 최근 매칭 순

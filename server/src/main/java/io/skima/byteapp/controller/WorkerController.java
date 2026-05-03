@@ -62,6 +62,8 @@ public class WorkerController {
     private final NotificationService notificationService;
     private final io.skima.byteapp.service.FavoriteService favoriteService;
     private final io.skima.byteapp.repository.ChatMessageRepository chatRepository;
+    private final io.skima.byteapp.repository.WorkerBlockedCafeRepository workerBlockedCafeRepository;
+    private final io.skima.byteapp.repository.CafeRepository workerCafeRepository;
 
     /** OPEN 시프트 목록 — 워커 본인 지원 상태 + 브랜드 정보 + 매장 신뢰도 enrich */
     @GetMapping("/shifts")
@@ -72,25 +74,67 @@ public class WorkerController {
         applicationRepository.findAllByWorkerId(workerId).forEach(a ->
                 statusByShift.put(a.getShift().getId(), a.getStatus()));
 
-        var openShifts = shiftService.findOpenShifts();
+        var allOpenShifts = shiftService.findOpenShifts();
+        // 단골 우선 노출: favoritesOnlyUntil > now 인 시프트는 즐겨찾기한 워커에게만 노출
+        var favCafeIds = new java.util.HashSet<>(
+                favoriteService.workerFavoriteCafeIds(principal.getDomainUser()));
+        // 차단 매장 자동 제외
+        var blockedCafeIds = new java.util.HashSet<>(
+                workerBlockedCafeRepository.findCafeIdsByWorkerId(workerId));
+        java.time.LocalDateTime now = java.time.LocalDateTime.now();
+        var openShifts = allOpenShifts.stream()
+                .filter(s -> {
+                    if (blockedCafeIds.contains(s.getCafe().getId())) return false;
+                    var until = s.getFavoritesOnlyUntil();
+                    if (until == null || until.isBefore(now)) return true;
+                    return favCafeIds.contains(s.getCafe().getId());
+                })
+                .toList();
         // 매장별 시그널 한 번씩만 계산 (cafeId 중복 제거)
         Map<Long, Double> avgRatingByCafe = new HashMap<>();
         Map<Long, Integer> ratingCountByCafe = new HashMap<>();
         Map<Long, Double> noShowRateByCafe = new HashMap<>();
+        Map<Long, Integer> trustScoreByCafe = new HashMap<>();
         java.util.Set<Long> cafeIds = new java.util.HashSet<>();
         openShifts.forEach(s -> cafeIds.add(s.getCafe().getId()));
         for (Long cafeId : cafeIds) {
             List<Rating> ratings = ratingRepository.findAllByCafeIdAndDirection(
                     cafeId, RatingDirection.WORKER_TO_OWNER);
+            Double avg = null;
             if (!ratings.isEmpty()) {
-                avgRatingByCafe.put(cafeId,
-                        ratings.stream().mapToInt(Rating::getScore).average().orElse(0));
+                avg = ratings.stream().mapToInt(Rating::getScore).average().orElse(0);
+                avgRatingByCafe.put(cafeId, avg);
                 ratingCountByCafe.put(cafeId, ratings.size());
             }
             List<ShiftMatch> matches = matchRepository.findAllByCafeId(cafeId);
+            Double noShowRate = null;
+            int totalMatches = matches.size();
             if (!matches.isEmpty()) {
                 long noShow = matches.stream().filter(m -> m.getStatus() == MatchStatus.NO_SHOW).count();
-                noShowRateByCafe.put(cafeId, (double) noShow / matches.size());
+                noShowRate = (double) noShow / matches.size();
+                noShowRateByCafe.put(cafeId, noShowRate);
+            }
+            // 매장 trust score 간단 계산 — 5건 미만이면 null (CafeDetailService 와 동일 공식)
+            if (totalMatches >= 5) {
+                long uniqueWorkers = matches.stream()
+                        .filter(m -> m.getStatus() != MatchStatus.NO_SHOW
+                                && m.getStatus() != MatchStatus.CANCELED)
+                        .map(m -> m.getWorker().getId())
+                        .distinct().count();
+                long regulars = matches.stream()
+                        .filter(m -> m.getStatus() != MatchStatus.NO_SHOW
+                                && m.getStatus() != MatchStatus.CANCELED)
+                        .collect(java.util.stream.Collectors.groupingBy(
+                                m -> m.getWorker().getId(), java.util.stream.Collectors.counting()))
+                        .values().stream().filter(v -> v >= 2).count();
+                Double rehire = uniqueWorkers == 0 ? 0 : (double) regulars / uniqueWorkers;
+                double s = 0;
+                s += (avg != null ? avg / 5.0 : 0) * 35;
+                s += rehire * 25;
+                s += (1.0 - (noShowRate != null ? noShowRate : 0)) * 15;
+                s += 0.5 * 15; // 정산 빠른 승인 — 시프트 검색용 간단 추정 (정확히는 CafeDetailService 에서 계산)
+                s += Math.min(totalMatches / 20.0, 1.0) * 10;
+                trustScoreByCafe.put(cafeId, (int) Math.round(s));
             }
         }
 
@@ -103,7 +147,9 @@ public class WorkerController {
                             brandCatalog.findByKey(s.getCafe().getBrandKey()).orElse(null),
                             avgRatingByCafe.get(cid),
                             ratingCountByCafe.get(cid),
-                            noShowRateByCafe.get(cid));
+                            noShowRateByCafe.get(cid),
+                            favCafeIds.contains(cid),
+                            trustScoreByCafe.get(cid));
                 })
                 .toList();
     }
@@ -274,6 +320,43 @@ public class WorkerController {
     public ResponseEntity<Void> removeFavoriteCafe(@AuthenticationPrincipal AuthUser principal,
                                                     @PathVariable Long cafeId) {
         favoriteService.removeWorkerFavorite(principal.getDomainUser(), cafeId);
+        return ResponseEntity.noContent().build();
+    }
+
+    /* ========= 차단 매장 (시프트 자동 제외) ========= */
+
+    @GetMapping("/blocked/cafes")
+    public List<Long> myBlockedCafeIds(@AuthenticationPrincipal AuthUser principal) {
+        return workerBlockedCafeRepository.findCafeIdsByWorkerId(principal.getDomainUser().getId());
+    }
+
+    @PostMapping("/blocked/cafes/{cafeId}")
+    @Transactional
+    public ResponseEntity<Void> blockCafe(@AuthenticationPrincipal AuthUser principal,
+                                           @PathVariable Long cafeId,
+                                           @RequestBody(required = false) java.util.Map<String, String> body) {
+        var worker = principal.getDomainUser();
+        // 단골이면 자동 해제 (단골/차단 동시 불가)
+        if (favoriteService.workerFavoriteCafeIds(worker).contains(cafeId)) {
+            favoriteService.removeWorkerFavorite(worker, cafeId);
+        }
+        if (workerBlockedCafeRepository.existsByWorkerIdAndCafeId(worker.getId(), cafeId)) {
+            return ResponseEntity.noContent().build();
+        }
+        var cafe = workerCafeRepository.findById(cafeId)
+                .orElseThrow(() -> io.skima.byteapp.common.BusinessException.notFound("매장을 찾을 수 없습니다"));
+        String reason = body != null ? body.get("reason") : null;
+        workerBlockedCafeRepository.save(io.skima.byteapp.domain.WorkerBlockedCafe.builder()
+                .worker(worker).cafe(cafe).reason(reason).build());
+        return ResponseEntity.noContent().build();
+    }
+
+    @DeleteMapping("/blocked/cafes/{cafeId}")
+    @Transactional
+    public ResponseEntity<Void> unblockCafe(@AuthenticationPrincipal AuthUser principal,
+                                              @PathVariable Long cafeId) {
+        workerBlockedCafeRepository.findByWorkerIdAndCafeId(principal.getDomainUser().getId(), cafeId)
+                .ifPresent(workerBlockedCafeRepository::delete);
         return ResponseEntity.noContent().build();
     }
 }

@@ -2,6 +2,7 @@ import { useCallback, useState } from 'react';
 import { Alert, FlatList, Platform, Pressable, RefreshControl, Text, View } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
 
+import { EmptyState } from '@/components/EmptyState';
 import { Icon } from '@/components/Icon';
 import { api } from '@/lib/api';
 import { Payout, fmtDateTime, fmtKRW } from '@/lib/types';
@@ -45,10 +46,15 @@ export default function WorkerPayoutsScreen() {
         </View>
       }
       ListEmptyComponent={
-        <View style={{ paddingTop: 60, alignItems: 'center' }}>
-          <Text style={{ fontSize: 36, marginBottom: 8 }}>💰</Text>
-          <Text style={styles.bodyMuted}>아직 정산 내역이 없어요</Text>
-        </View>
+        <EmptyState
+          emoji="💰"
+          title="아직 정산 내역이 없어요"
+          subtitle="시프트 지원 → 점주 매칭 확정 → 출퇴근 → 정산은 30분 안에 입금"
+          actions={[{
+            label: '시프트 검색',
+            onPress: () => router.push('/worker/shifts' as never),
+          }]}
+        />
       }
       renderItem={({ item }) => {
         const elapsed = item.elapsedMinutes;

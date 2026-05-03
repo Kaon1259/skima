@@ -70,10 +70,15 @@ public class Shift {
     @Column(name = "matched_at")
     private LocalDateTime matchedAt;
 
+    /** 단골 워커에게만 N분 우선 노출 — 이 시각까지는 즐겨찾기한 워커만 지원 가능. null=모두 공개 */
+    @Column(name = "favorites_only_until")
+    private LocalDateTime favoritesOnlyUntil;
+
     @Builder
     public Shift(Cafe cafe, LocalDateTime startAt, LocalDateTime endAt,
                  Integer hourlyWage, Integer headcount, String description,
-                 JobRole jobRole, SkillLevel minSkill, Set<String> requirements) {
+                 JobRole jobRole, SkillLevel minSkill, Set<String> requirements,
+                 LocalDateTime favoritesOnlyUntil) {
         this.cafe = cafe;
         this.startAt = startAt;
         this.endAt = endAt;
@@ -84,6 +89,7 @@ public class Shift {
         this.minSkill = minSkill;
         if (requirements != null) this.requirements = new HashSet<>(requirements);
         this.status = ShiftStatus.OPEN;
+        this.favoritesOnlyUntil = favoritesOnlyUntil;
     }
 
     @PrePersist

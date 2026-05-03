@@ -27,6 +27,11 @@ export type Cafe = {
   brandName?: string | null;
   latitude?: number | null;
   longitude?: number | null;
+  openHours?: string | null;
+  seatCount?: number | null;
+  phone?: string | null;
+  description?: string | null;
+  imageUrl?: string | null;
 };
 
 export type Shift = {
@@ -46,6 +51,7 @@ export type Shift = {
   jobRole?: JobRole | null;
   minSkill?: SkillLevel | null;
   requirements?: string[];
+  favoritesOnlyUntil?: string | null;
 };
 
 export type WorkerShift = Omit<Shift, 'matchedAt' | 'matchingMinutes'> & {
@@ -58,6 +64,19 @@ export type WorkerShift = Omit<Shift, 'matchedAt' | 'matchingMinutes'> & {
   cafeAvgRating?: number | null;
   cafeRatingsCount?: number | null;
   cafeNoShowRate?: number | null;
+  isFavoriteCafe?: boolean | null;
+  cafeLatitude?: number | null;
+  cafeLongitude?: number | null;
+  cafeTrustScore?: number | null;
+};
+
+export type WorkerTier = 'NEW' | 'REGULAR' | 'VERIFIED' | 'ELITE';
+
+export const WORKER_TIER_META: Record<WorkerTier, { label: string; emoji: string; color: string; bg: string; border: string; desc: string }> = {
+  NEW:      { label: '신규',     emoji: '🌱', color: '#1E40AF', bg: '#DBEAFE', border: '#60A5FA', desc: '0~1회 완료' },
+  REGULAR:  { label: '일반',     emoji: '✓',  color: '#374151', bg: '#F3F4F6', border: '#9CA3AF', desc: '2~9회 완료' },
+  VERIFIED: { label: 'Verified', emoji: '✅', color: '#065F46', bg: '#D1FAE5', border: '#10B981', desc: '10회+ ★4.5+ 노쇼0' },
+  ELITE:    { label: 'Elite',    emoji: '👑', color: '#7B5800', bg: '#FFF4D2', border: '#E5B100', desc: '30회+ ★4.7+ 재고용 60%+' },
 };
 
 export type WorkerStats = {
@@ -73,6 +92,8 @@ export type WorkerStats = {
   noShowRate: number | null;
   ratingsCount: number;
   scoreDistribution?: number[];
+  tier?: WorkerTier;
+  trustScore?: number | null;
 };
 
 export type CafeDetail = {
@@ -85,10 +106,21 @@ export type CafeDetail = {
   brandColor?: string | null;
   brandName?: string | null;
   ownerName: string;
+  openHours?: string | null;
+  seatCount?: number | null;
+  phone?: string | null;
+  description?: string | null;
   avgRating: number | null;
   ratingsCount: number | null;
   noShowRate: number | null;
   totalCompletedShifts: number;
+  totalMatches: number;
+  rehireRate?: number | null;
+  avgWageGross?: number | null;
+  regularsCount?: number | null;
+  payoutManualRate?: number | null;
+  trustScore?: number | null;
+  imageUrl?: string | null;
   recentReviews: Rating[];
   openShifts: Shift[];
   ownerView?: CafeOwnerView | null;
@@ -115,7 +147,20 @@ export type RegularWorker = {
 export type WorkerProfile = {
   id: number;
   name: string;
+  profileImage?: string | null;
+  selfReportedLevel?: string | null;
+  capableRoles?: string[];
+  certifications?: string[];
+  bio?: string | null;
+  experienceYears?: number | null;
+  availableHours?: string | null;
+  healthCertStatus?: HealthCertStatus | null;
   stats: WorkerStats;
+  rehireRate?: number | null;
+  favoriteCafeCount?: number | null;
+  onTimeCount?: number | null;
+  lateCount?: number | null;
+  avgWorkMinutes?: number | null;
   scoreDistribution: number[];
   recentReviews: Rating[];
   recentMatches: WorkerMatchSummary[];
@@ -289,11 +334,13 @@ export type ShiftApplication = {
   shiftId: number;
   workerId: number;
   workerName: string;
+  workerProfileImage?: string | null;
   appliedAt: string;
   status: 'PENDING' | 'ACCEPTED' | 'REJECTED' | 'WITHDRAWN';
   workerLevel?: SkillLevel | null;
   workerRoles?: JobRole[];
   workerCertifications?: string[];
+  workerHealthCertStatus?: HealthCertStatus | null;
 };
 
 export type ShiftMatch = {
@@ -375,6 +422,90 @@ export type MyProfile = {
   selfReportedLevel?: SkillLevel | null;
   capableRoles?: JobRole[];
   certifications?: string[];
+  bio?: string | null;
+  experienceYears?: number | null;
+  availableHours?: string | null;
+  prefMinWage?: number | null;
+  prefMinCafeRating?: number | null;
+  prefMaxCafeNoShowRate?: number | null;
+  profileImage?: string | null;
+  healthCertImage?: string | null;
+  healthCertStatus?: HealthCertStatus | null;
+  healthCertUploadedAt?: string | null;
+  healthCertVerifiedAt?: string | null;
+  healthCertExpiresAt?: string | null;
+  healthCertRejectReason?: string | null;
+};
+
+export type HealthCertStatus = 'NOT_UPLOADED' | 'PENDING' | 'VERIFIED' | 'REJECTED' | 'EXPIRED';
+
+export const HEALTH_CERT_STATUS_META: Record<HealthCertStatus, { label: string; emoji: string; color: 'success' | 'warn' | 'danger' | 'muted' }> = {
+  NOT_UPLOADED: { label: '미업로드',  emoji: '⚠️', color: 'warn' },
+  PENDING:      { label: '검토 대기', emoji: '⏳', color: 'muted' },
+  VERIFIED:     { label: '인증 완료', emoji: '✅', color: 'success' },
+  REJECTED:     { label: '거부됨',    emoji: '❌', color: 'danger' },
+  EXPIRED:      { label: '만료',      emoji: '⌛', color: 'danger' },
+};
+
+export type DisputeReason =
+  | 'NO_SHOW_DISPUTE'
+  | 'LATE_CHECKIN'
+  | 'EARLY_CHECKOUT'
+  | 'RUDE_BEHAVIOR'
+  | 'WAGE_MISMATCH'
+  | 'SAFETY_ISSUE'
+  | 'OTHER';
+
+export type DisputeStatus = 'PENDING' | 'RESOLVED' | 'DISMISSED';
+export type DisputeVerdict = 'REPORTER_WINS' | 'RESPONDENT_WINS' | 'NEUTRAL';
+
+export const DISPUTE_REASON_LABEL: Record<DisputeReason, { label: string; emoji: string; allowedRoles: ('WORKER' | 'OWNER')[] }> = {
+  NO_SHOW_DISPUTE: { label: '노쇼 처리 이의', emoji: '🚫', allowedRoles: ['WORKER'] },
+  LATE_CHECKIN:    { label: '지각',            emoji: '⏰', allowedRoles: ['OWNER'] },
+  EARLY_CHECKOUT:  { label: '조기 퇴근',       emoji: '🏃', allowedRoles: ['OWNER'] },
+  RUDE_BEHAVIOR:   { label: '무례한 행동',     emoji: '😠', allowedRoles: ['WORKER', 'OWNER'] },
+  WAGE_MISMATCH:   { label: '시급/근무시간 불일치', emoji: '💰', allowedRoles: ['WORKER'] },
+  SAFETY_ISSUE:    { label: '안전 문제',       emoji: '⚠️', allowedRoles: ['WORKER'] },
+  OTHER:           { label: '기타',            emoji: '📝', allowedRoles: ['WORKER', 'OWNER'] },
+};
+
+export type Dispute = {
+  id: number;
+  matchId: number;
+  shiftId: number;
+  cafeName: string;
+  workerName: string;
+  reporterId: number;
+  reporterName: string;
+  reporterRole: 'WORKER' | 'OWNER';
+  reason: DisputeReason;
+  comment?: string | null;
+  status: DisputeStatus;
+  verdict?: DisputeVerdict | null;
+  resolutionNote?: string | null;
+  createdAt: string;
+  resolvedAt?: string | null;
+};
+
+export type InvitationStatus = 'PENDING' | 'ACCEPTED' | 'REJECTED' | 'EXPIRED' | 'CANCELED';
+
+export type ShiftInvitationItem = {
+  id: number;
+  shiftId: number;
+  cafeId: number;
+  cafeName: string;
+  workerId: number;
+  workerName: string;
+  ownerId: number;
+  ownerName: string;
+  message?: string | null;
+  status: InvitationStatus;
+  startAt: string;
+  endAt: string;
+  hourlyWage: number;
+  createdAt: string;
+  expiresAt: string;
+  respondedAt?: string | null;
 };
 
 export type WorkerPoolEntry = {
@@ -390,12 +521,14 @@ export type WorkerPoolEntry = {
   lastMatchAt?: string | null;
   lastCafeName?: string | null;
   lastCafeId?: number | null;
+  trustScore?: number | null;
 };
 
 export type Payout = {
   id: number;
   matchId: number;
   workerId: number;
+  workerName?: string | null;
   cafeId?: number | null;
   cafeName?: string | null;
   workDate?: string | null;

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Modal, Platform, Pressable, Text, TextInput, View } from 'react-native';
+import { Alert, Modal, Platform, Pressable, Text, TextInput, View } from 'react-native';
 
 import { api } from '@/lib/api';
 import { colors, radius, spacing, styles } from '@/lib/theme';
@@ -11,6 +11,8 @@ type Props = {
   matchId: number | null;
   targetName: string;
   mode?: RatingMode;
+  /** worker-rates-owner 모드에서 ★≤2 또는 willRehire=false 시 차단 옵션 노출 — 차단할 cafeId */
+  cafeId?: number | null;
   onClose: () => void;
   onSubmitted: () => void;
 };
@@ -62,14 +64,20 @@ export function RatingModal({
   matchId,
   targetName,
   mode = 'owner-rates-worker',
+  cafeId,
   onClose,
   onSubmitted,
 }: Props) {
   const [score, setScore] = useState(5);
   const [willRehire, setWillRehire] = useState(true);
   const [comment, setComment] = useState('');
+  const [alsoBlock, setAlsoBlock] = useState(false);
   const [busy, setBusy] = useState(false);
   const copy = COPY[mode];
+
+  // 워커가 매장 평가 시: ★≤2 또는 willRehire=false 면 차단 옵션 노출
+  const showBlockOption = mode === 'worker-rates-owner' && cafeId != null
+    && (score <= 2 || !willRehire);
 
   // 모달 열릴 때마다 폼 초기화
   useEffect(() => {
@@ -77,11 +85,13 @@ export function RatingModal({
       setScore(5);
       setWillRehire(true);
       setComment('');
+      setAlsoBlock(false);
     }
   }, [visible]);
 
   function notify(msg: string) {
     if (Platform.OS === 'web') window.alert(msg);
+    else Alert.alert('안내', msg);
   }
 
   async function submit() {
@@ -92,7 +102,18 @@ export function RatingModal({
         method: 'POST',
         body: { score, willRehire, comment: comment.trim() || null },
       });
-      notify('평가 등록 완료');
+      // 워커가 별로였던 매장 차단 동시 처리
+      if (showBlockOption && alsoBlock && cafeId != null) {
+        try {
+          await api(`/api/worker/blocked/cafes/${cafeId}`, {
+            method: 'POST',
+            body: { reason: comment.trim() || null },
+          });
+        } catch {
+          // 차단은 best-effort — 평가는 이미 저장됨
+        }
+      }
+      notify(alsoBlock ? '평가 등록 + 매장 차단 완료' : '평가 등록 완료');
       onSubmitted();
       onClose();
     } catch (e) {
@@ -218,6 +239,47 @@ export function RatingModal({
             placeholderTextColor={colors.textLight}
             multiline
           />
+
+          {/* 차단 옵션 — 워커가 ★≤2 또는 willRehire=false 평가 시 노출 */}
+          {showBlockOption ? (
+            <Pressable
+              onPress={() => setAlsoBlock((v) => !v)}
+              style={({ pressed }) => [
+                {
+                  marginTop: 12,
+                  padding: 12,
+                  borderRadius: radius.md,
+                  borderWidth: 1.5,
+                  borderColor: alsoBlock ? colors.danger : colors.border,
+                  backgroundColor: alsoBlock ? colors.dangerSoft : colors.surfaceAlt,
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  gap: 10,
+                },
+                pressed && { opacity: 0.85 },
+              ]}
+            >
+              <View
+                style={{
+                  width: 22, height: 22, borderRadius: 6,
+                  borderWidth: 2,
+                  borderColor: alsoBlock ? colors.danger : colors.border,
+                  backgroundColor: alsoBlock ? colors.danger : 'transparent',
+                  alignItems: 'center', justifyContent: 'center',
+                }}
+              >
+                {alsoBlock ? <Text style={{ color: '#fff', fontWeight: '900', fontSize: 14 }}>✓</Text> : null}
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={{ fontSize: 13, fontWeight: '800', color: alsoBlock ? colors.danger : colors.text }}>
+                  🚫 이 매장 차단하기
+                </Text>
+                <Text style={{ fontSize: 11, color: colors.textMuted, marginTop: 2 }}>
+                  앞으로 시프트 검색에서 자동 제외됩니다 (마이 탭에서 해제 가능)
+                </Text>
+              </View>
+            </Pressable>
+          ) : null}
 
           <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>
             <Pressable

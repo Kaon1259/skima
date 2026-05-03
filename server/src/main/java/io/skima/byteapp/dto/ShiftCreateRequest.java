@@ -18,6 +18,8 @@ public record ShiftCreateRequest(
         String description,
         JobRole jobRole,
         SkillLevel minSkill,
-        Set<String> requirements
+        Set<String> requirements,
+        /** 단골 워커에게만 N분 우선 노출. null/0 = 모두 공개. */
+        Integer favoritesOnlyMinutes
 ) {
 }

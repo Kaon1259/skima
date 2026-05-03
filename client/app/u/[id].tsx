@@ -2,9 +2,18 @@ import { useCallback, useState } from 'react';
 import { Alert, FlatList, Platform, Pressable, RefreshControl, Text, View } from 'react-native';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 
+import { Avatar } from '@/components/Avatar';
+import { HealthCertBadge } from '@/components/HealthCertBadge';
 import { Icon } from '@/components/Icon';
+import { TrustScoreBadge } from '@/components/TrustScoreBadge';
+import { WorkerTierBadge } from '@/components/WorkerTierBadge';
 import { api } from '@/lib/api';
 import {
+  JOB_ROLE_LABEL,
+  JobRole,
+  REQUIREMENT_LABEL,
+  SKILL_LEVEL_LABEL,
+  SkillLevel,
   WorkerProfile,
   fmtDateTime,
   fmtKRW,
@@ -59,26 +68,100 @@ export default function WorkerProfileScreen() {
           {/* 헤더 */}
           <View style={[styles.card, { marginBottom: spacing.md }]}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-              <View
-                style={{
-                  width: 56,
-                  height: 56,
-                  borderRadius: 28,
-                  backgroundColor: colors.primarySoft,
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                }}
-              >
-                <Text style={{ color: colors.primary, fontWeight: '900', fontSize: 22 }}>
-                  {profile.name.slice(-1)}
-                </Text>
-              </View>
+              <Avatar name={profile.name} imageUrl={profile.profileImage} size={56} />
               <View style={{ flex: 1 }}>
                 <Text style={[styles.h2, { fontSize: 20 }]}>{profile.name}</Text>
-                <Text style={[styles.bodyMuted, { fontSize: 12, marginTop: 2 }]}>워커</Text>
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 4, alignItems: 'center' }}>
+                  <TrustScoreBadge score={profile.stats?.trustScore} size="md" />
+                  <WorkerTierBadge tier={profile.stats?.tier} size="md" />
+                  <HealthCertBadge status={profile.healthCertStatus} size="sm" />
+                  <Text style={[styles.bodyMuted, { fontSize: 12 }]}>워커</Text>
+                  {profile.experienceYears != null ? (
+                    <Text style={{ fontSize: 11, fontWeight: '700', color: colors.textMuted }}>
+                      · 경력 {profile.experienceYears}년
+                    </Text>
+                  ) : null}
+                  {profile.selfReportedLevel ? (
+                    <View style={{
+                      paddingHorizontal: 6, paddingVertical: 2,
+                      borderRadius: radius.pill, backgroundColor: colors.primarySoft,
+                    }}>
+                      <Text style={{ fontSize: 10, fontWeight: '900', color: colors.primaryDark }}>
+                        {SKILL_LEVEL_LABEL[profile.selfReportedLevel as SkillLevel]?.short ?? profile.selfReportedLevel}
+                      </Text>
+                    </View>
+                  ) : null}
+                </View>
               </View>
             </View>
+            {profile.availableHours ? (
+              <Text style={{ fontSize: 12, color: colors.textMuted, marginTop: 8 }}>
+                🕒 {profile.availableHours}
+              </Text>
+            ) : null}
           </View>
+
+          {/* 자기소개 + 능력 카드 */}
+          {profile.bio || (profile.capableRoles && profile.capableRoles.length > 0) || (profile.certifications && profile.certifications.length > 0) ? (
+            <View style={[styles.card, { marginBottom: spacing.md }]}>
+              {profile.bio ? (
+                <View style={{ marginBottom: 12 }}>
+                  <Text style={{ fontSize: 11, color: colors.textMuted, fontWeight: '700', marginBottom: 4 }}>
+                    📝 자기소개
+                  </Text>
+                  <Text style={{ fontSize: 13, color: colors.text, lineHeight: 19 }}>{profile.bio}</Text>
+                </View>
+              ) : null}
+              {profile.capableRoles && profile.capableRoles.length > 0 ? (
+                <View style={{ marginBottom: 10 }}>
+                  <Text style={{ fontSize: 11, color: colors.textMuted, fontWeight: '700', marginBottom: 6 }}>
+                    가능 직무
+                  </Text>
+                  <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 5 }}>
+                    {profile.capableRoles.map((r) => {
+                      const meta = JOB_ROLE_LABEL[r as JobRole];
+                      return (
+                        <View key={r} style={{
+                          flexDirection: 'row', gap: 4, alignItems: 'center',
+                          paddingHorizontal: 8, paddingVertical: 4,
+                          borderRadius: radius.pill, backgroundColor: colors.primarySoft,
+                        }}>
+                          <Text style={{ fontSize: 12 }}>{meta?.emoji ?? '🔹'}</Text>
+                          <Text style={{ fontSize: 11, fontWeight: '700', color: colors.primaryDark }}>
+                            {meta?.label ?? r}
+                          </Text>
+                        </View>
+                      );
+                    })}
+                  </View>
+                </View>
+              ) : null}
+              {profile.certifications && profile.certifications.length > 0 ? (
+                <View>
+                  <Text style={{ fontSize: 11, color: colors.textMuted, fontWeight: '700', marginBottom: 6 }}>
+                    보유 자격
+                  </Text>
+                  <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 5 }}>
+                    {profile.certifications.map((c) => {
+                      const meta = REQUIREMENT_LABEL[c];
+                      return (
+                        <View key={c} style={{
+                          flexDirection: 'row', gap: 4, alignItems: 'center',
+                          paddingHorizontal: 8, paddingVertical: 4,
+                          borderRadius: radius.pill, backgroundColor: colors.successSoft,
+                        }}>
+                          <Text style={{ fontSize: 12 }}>{meta?.emoji ?? '✓'}</Text>
+                          <Text style={{ fontSize: 11, fontWeight: '700', color: colors.success }}>
+                            {meta?.label ?? c}
+                          </Text>
+                        </View>
+                      );
+                    })}
+                  </View>
+                </View>
+              ) : null}
+            </View>
+          ) : null}
 
           {/* KPI */}
           <View style={[styles.card, { marginBottom: spacing.md, flexDirection: 'row', gap: 8 }]}>
@@ -100,6 +183,37 @@ export default function WorkerProfileScreen() {
             <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
               <Text style={[styles.bodyMuted, { fontSize: 12, fontWeight: '700' }]}>누적 수입 (실수령)</Text>
               <Text style={{ fontSize: 14, fontWeight: '800', color: colors.text }}>{fmtKRW(s.totalEarnings)}</Text>
+            </View>
+          </View>
+
+          {/* 평판 시그널 — 점주가 신뢰도 판단용 */}
+          <View style={[styles.card, { marginBottom: spacing.md }]}>
+            <Text style={[styles.title, { marginBottom: 10 }]}>평판 시그널</Text>
+            <View style={{ flexDirection: 'row', gap: 8 }}>
+              <Stat
+                label="정시 출근"
+                value={`${profile.onTimeCount ?? 0}회`}
+                sub={profile.lateCount && profile.lateCount > 0 ? `지각 ${profile.lateCount}` : '지각 없음'}
+                color={profile.lateCount && profile.lateCount > 0 ? colors.warn : colors.success}
+              />
+              <Stat
+                label="평균 근무"
+                value={profile.avgWorkMinutes != null ? `${Math.round(profile.avgWorkMinutes / 60 * 10) / 10}h` : '—'}
+                sub="실 근무"
+                color={colors.info}
+              />
+              <Stat
+                label="단골 매장"
+                value={`${profile.favoriteCafeCount ?? 0}곳`}
+                sub="즐겨찾기"
+                color={colors.warn}
+              />
+              <Stat
+                label="재방문"
+                value={profile.rehireRate != null ? fmtPercent(profile.rehireRate) : '—'}
+                sub="2회+ 매장"
+                color={colors.success}
+              />
             </View>
           </View>
 

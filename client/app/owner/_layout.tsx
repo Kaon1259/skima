@@ -58,18 +58,20 @@ export default function OwnerLayout() {
           }}
         />
         <Tabs.Screen
-          name="statement"
+          name="payouts"
           options={{
-            title: '월간명세',
-            tabBarIcon: ({ size }) => <Icon name="document" size={size ?? 22} />,
+            title: '정산',
+            tabBarIcon: ({ size }) => <Icon name="wallet" size={size ?? 22} />,
           }}
         />
+        <Tabs.Screen name="statement" options={{ href: null, title: '월간명세' }} />
         <Tabs.Screen name="shift/[id]" options={{ href: null, title: '지원자' }} />
         <Tabs.Screen name="contract/[matchId]" options={{ href: null, title: '근로계약서' }} />
         <Tabs.Screen name="withholding/[matchId]" options={{ href: null, title: '원천징수영수증' }} />
         <Tabs.Screen name="dashboard/[status]" options={{ href: null, title: '대시보드 상세' }} />
         <Tabs.Screen name="history" options={{ href: null, title: '시프트 히스토리' }} />
         <Tabs.Screen name="worker-pool" options={{ href: null, title: '워커 풀' }} />
+        <Tabs.Screen name="shift-templates" options={{ href: null, title: '시프트 템플릿' }} />
       </Tabs>
     </AuthGate>
   );

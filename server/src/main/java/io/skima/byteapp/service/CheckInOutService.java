@@ -71,6 +71,8 @@ public class CheckInOutService {
         return R * c;
     }
 
+    private static final long MIN_WORK_MINUTES = 30;
+
     @Transactional
     public ShiftMatch checkOut(User worker, Long matchId) {
         ShiftMatch match = matchRepository.findById(matchId)
@@ -80,6 +82,14 @@ public class CheckInOutService {
         }
         if (match.getStatus() != MatchStatus.CHECKED_IN) {
             throw BusinessException.conflict("체크인 상태가 아닙니다");
+        }
+        // 최소 근무 시간 검증 — 체크인 후 30분 미만 체크아웃은 거부 (gross=0 방지 + 악용 방지)
+        if (match.getCheckInAt() != null) {
+            long worked = java.time.Duration.between(match.getCheckInAt(), LocalDateTime.now()).toMinutes();
+            if (worked < MIN_WORK_MINUTES) {
+                throw BusinessException.badRequest(
+                        "근무 시작 후 " + MIN_WORK_MINUTES + "분이 지나야 퇴근 체크아웃 가능합니다 (현재 " + worked + "분)");
+            }
         }
         match.checkOut(LocalDateTime.now());
         match.getShift().markCompleted();

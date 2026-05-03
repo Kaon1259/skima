@@ -39,3 +39,16 @@ export async function getCurrentCoords(timeoutMs = 8000): Promise<Coords> {
   });
   return { latitude: pos.coords.latitude, longitude: pos.coords.longitude };
 }
+
+/** Haversine 거리 (km) — 두 좌표 사이 거리 계산 */
+export function distanceKm(a: Coords, b: Coords): number {
+  const R = 6371; // 지구 반지름 km
+  const toRad = (deg: number) => (deg * Math.PI) / 180;
+  const dLat = toRad(b.latitude - a.latitude);
+  const dLon = toRad(b.longitude - a.longitude);
+  const lat1 = toRad(a.latitude);
+  const lat2 = toRad(b.latitude);
+  const x = Math.sin(dLat / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLon / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(x));
+}
+

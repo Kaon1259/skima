@@ -1,10 +1,15 @@
-import { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import { Alert, FlatList, Platform, Pressable, RefreshControl, Text, TextInput, View } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
 
+import { Modal, ScrollView } from 'react-native';
+
+import { Avatar } from '@/components/Avatar';
 import { Icon } from '@/components/Icon';
+import { TrustScoreBadge } from '@/components/TrustScoreBadge';
+import { useToast } from '@/lib/toast';
 import { api } from '@/lib/api';
-import { WorkerPoolEntry, fmtDateTime, fmtPercent } from '@/lib/types';
+import { OwnerShift, WorkerPoolEntry, fmtDateTime, fmtKRW, fmtPercent } from '@/lib/types';
 import { colors, radius, spacing, styles } from '@/lib/theme';
 
 type Sort = 'favorites' | 'recent' | 'rating' | 'rehire' | 'most-used' | 'no-show';
@@ -18,11 +23,30 @@ const SORT_LABEL: Record<Sort, string> = {
   'no-show': '노쇼 많은순',
 };
 
+type Tier = 'VIP' | 'REGULAR' | 'NEW';
+
+function classifyTier(w: WorkerPoolEntry): Tier {
+  if (w.completedMatches >= 5 && (w.avgRatingByOwner ?? 0) >= 4.5) return 'VIP';
+  if (w.completedMatches >= 2) return 'REGULAR';
+  return 'NEW';
+}
+
+const TIER_META: Record<Tier, { label: string; emoji: string; color: string; bg: string; border: string }> = {
+  VIP: { label: 'VIP', emoji: '👑', color: '#7B5800', bg: '#FFF4D2', border: '#E5B100' },
+  REGULAR: { label: '단골', emoji: '⭐', color: '#7C2D12', bg: '#FFEDD5', border: '#FB923C' },
+  NEW: { label: '신규', emoji: '🌱', color: '#1E40AF', bg: '#DBEAFE', border: '#60A5FA' },
+};
+
+type TierFilter = 'ALL' | Tier;
+
 export default function WorkerPoolScreen() {
+  const toast = useToast();
   const [pool, setPool] = useState<WorkerPoolEntry[]>([]);
+  const [inviteTarget, setInviteTarget] = useState<{ workerId: number; workerName: string } | null>(null);
   const [favoriteIds, setFavoriteIds] = useState<Set<number>>(new Set());
   const [refreshing, setRefreshing] = useState(false);
   const [sort, setSort] = useState<Sort>('favorites');
+  const [tierFilter, setTierFilter] = useState<TierFilter>('ALL');
   const [query, setQuery] = useState('');
 
   const load = useCallback(async () => {
@@ -73,8 +97,9 @@ export default function WorkerPoolScreen() {
   const sorted = useMemo(() => {
     const filtered = pool.filter((w) => {
       const q = query.trim().toLowerCase();
-      if (!q) return true;
-      return w.workerName.toLowerCase().includes(q);
+      if (q && !w.workerName.toLowerCase().includes(q)) return false;
+      if (tierFilter !== 'ALL' && classifyTier(w) !== tierFilter) return false;
+      return true;
     });
     const arr = [...filtered];
     switch (sort) {
@@ -105,18 +130,24 @@ export default function WorkerPoolScreen() {
         );
     }
     return arr;
-  }, [pool, sort, query, favoriteIds]);
+  }, [pool, sort, query, favoriteIds, tierFilter]);
 
-  // 헤더 통계
+  // 헤더 통계 — 그룹별
   const totals = useMemo(() => {
+    let vip = 0, regular = 0, fresh = 0;
+    for (const w of pool) {
+      const t = classifyTier(w);
+      if (t === 'VIP') vip++;
+      else if (t === 'REGULAR') regular++;
+      else fresh++;
+    }
     const totalWorkers = pool.length;
-    const repeaters = pool.filter((w) => w.totalMatches >= 2).length;
-    const goodWorkers = pool.filter((w) => (w.avgRatingByOwner ?? 0) >= 4).length;
     const noShowWorkers = pool.filter((w) => w.noShowCount > 0).length;
-    return { totalWorkers, repeaters, goodWorkers, noShowWorkers };
+    return { totalWorkers, vip, regular, fresh, noShowWorkers };
   }, [pool]);
 
   return (
+    <>
     <FlatList
       style={{ backgroundColor: colors.surfaceAlt }}
       contentContainerStyle={{ padding: spacing.lg, paddingBottom: 110 }}
@@ -133,16 +164,42 @@ export default function WorkerPoolScreen() {
             </Text>
           </View>
 
-          {/* 헤더 통계 */}
-          <View style={{ flexDirection: 'row', gap: 8, marginBottom: 12 }}>
-            <Stat label="총 워커" value={totals.totalWorkers} color={colors.text} />
-            <Stat label="재방문" value={totals.repeaters} color={colors.success} sub="2회+" />
-            <Stat label="★4+" value={totals.goodWorkers} color={colors.warn} />
+          {/* 헤더 통계 — 그룹별 + 노쇼 */}
+          <View style={{ flexDirection: 'row', gap: 8, marginBottom: 8 }}>
+            <Stat label="총" value={totals.totalWorkers} color={colors.text} />
+            <Stat label="👑 VIP" value={totals.vip} color={TIER_META.VIP.color} sub="5+ ★4.5+" />
+            <Stat label="⭐ 단골" value={totals.regular} color={TIER_META.REGULAR.color} sub="2~4회" />
+            <Stat label="🌱 신규" value={totals.fresh} color={TIER_META.NEW.color} sub="0~1회" />
             <Stat
               label="노쇼"
               value={totals.noShowWorkers}
               color={totals.noShowWorkers > 0 ? colors.danger : colors.textMuted}
             />
+          </View>
+
+          {/* 그룹 필터 */}
+          <View style={{ flexDirection: 'row', gap: 6, marginBottom: 10 }}>
+            {(['ALL', 'VIP', 'REGULAR', 'NEW'] as TierFilter[]).map((t) => {
+              const active = tierFilter === t;
+              const meta = t === 'ALL' ? null : TIER_META[t];
+              return (
+                <Pressable
+                  key={t}
+                  onPress={() => setTierFilter(t)}
+                  style={[
+                    styles.chip,
+                    active && {
+                      backgroundColor: meta?.border ?? colors.primary,
+                      borderColor: meta?.border ?? colors.primary,
+                    },
+                  ]}
+                >
+                  <Text style={[styles.chipText, active && { color: '#fff' }]}>
+                    {t === 'ALL' ? '전체' : `${meta!.emoji} ${meta!.label}`}
+                  </Text>
+                </Pressable>
+              );
+            })}
           </View>
 
           {/* 검색 */}
@@ -194,9 +251,24 @@ export default function WorkerPoolScreen() {
           entry={item}
           isFavorite={favoriteIds.has(item.workerId)}
           onToggleFavorite={() => toggleFavorite(item.workerId)}
+          onInvite={() => setInviteTarget({ workerId: item.workerId, workerName: item.workerName })}
         />
       )}
     />
+    <InviteModal
+      visible={inviteTarget != null}
+      target={inviteTarget}
+      onClose={() => setInviteTarget(null)}
+      onSent={() => {
+        toast.push({
+          title: `📨 ${inviteTarget?.workerName ?? '워커'}에게 초대 발송`,
+          subtitle: '워커가 1탭 수락하면 매칭 즉시 확정됩니다',
+          severity: 'success',
+        });
+        setInviteTarget(null);
+      }}
+    />
+    </>
   );
 }
 
@@ -226,10 +298,12 @@ function WorkerCard({
   entry: w,
   isFavorite,
   onToggleFavorite,
+  onInvite,
 }: {
   entry: WorkerPoolEntry;
   isFavorite: boolean;
   onToggleFavorite: () => void;
+  onInvite: () => void;
 }) {
   const tone = w.noShowCount > 0
     ? 'negative'
@@ -259,23 +333,39 @@ function WorkerCard({
       ]}
     >
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-        <View
-          style={{
-            width: 44,
-            height: 44,
-            borderRadius: 22,
-            backgroundColor: borderColor,
-            alignItems: 'center',
-            justifyContent: 'center',
-          }}
-        >
-          <Text style={{ color: '#fff', fontWeight: '900', fontSize: 14 }}>
-            {w.workerName.slice(-1)}
-          </Text>
-        </View>
+        <Avatar
+          name={w.workerName}
+          imageUrl={w.profileImage}
+          size={44}
+          bg={borderColor}
+          fg="#fff"
+        />
         <View style={{ flex: 1 }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
             <Text style={styles.title}>{w.workerName}</Text>
+            {/* 신뢰도 점수 */}
+            <TrustScoreBadge score={w.trustScore} />
+            {/* 자동 그룹 뱃지 (VIP/단골/신규) */}
+            {(() => {
+              const tier = classifyTier(w);
+              const meta = TIER_META[tier];
+              return (
+                <View
+                  style={{
+                    paddingHorizontal: 7,
+                    paddingVertical: 2,
+                    borderRadius: radius.pill,
+                    backgroundColor: meta.bg,
+                    borderWidth: 1,
+                    borderColor: meta.border,
+                  }}
+                >
+                  <Text style={{ fontSize: 10, fontWeight: '900', color: meta.color }}>
+                    {meta.emoji} {meta.label}
+                  </Text>
+                </View>
+              );
+            })()}
             {isFavorite ? (
               <View
                 style={{
@@ -285,7 +375,7 @@ function WorkerCard({
                   backgroundColor: colors.warnSoft,
                 }}
               >
-                <Text style={{ fontSize: 10, fontWeight: '900', color: colors.warn }}>⭐ 단골</Text>
+                <Text style={{ fontSize: 10, fontWeight: '900', color: colors.warn }}>⭐ 점주 단골</Text>
               </View>
             ) : null}
             {w.totalMatches >= 2 ? (
@@ -357,6 +447,34 @@ function WorkerCard({
         <Pill label="총 매칭" value={String(w.totalMatches)} color={colors.info} />
         <Pill label="완료" value={String(w.completedMatches)} color={colors.text} />
       </View>
+
+      {/* 1탭 재고용 — 시프트 직접 초대 */}
+      <Pressable
+        onPress={(e) => {
+          e.stopPropagation();
+          onInvite();
+        }}
+        style={({ pressed }) => [
+          {
+            marginTop: 10,
+            paddingVertical: 10,
+            borderRadius: radius.md,
+            backgroundColor: colors.primarySoft,
+            borderWidth: 1.5,
+            borderColor: colors.primary,
+            alignItems: 'center',
+            flexDirection: 'row',
+            justifyContent: 'center',
+            gap: 6,
+          },
+          pressed && { opacity: 0.85 },
+        ]}
+      >
+        <Text style={{ fontSize: 14 }}>📨</Text>
+        <Text style={{ fontSize: 12, fontWeight: '800', color: colors.primaryDark }}>
+          이 워커에게 시프트 직접 제안
+        </Text>
+      </Pressable>
     </Pressable>
   );
 }
@@ -369,5 +487,179 @@ function Pill({ label, value, color }: { label: string; value: string; color: st
         {label}
       </Text>
     </View>
+  );
+}
+
+function InviteModal({
+  visible,
+  target,
+  onClose,
+  onSent,
+}: {
+  visible: boolean;
+  target: { workerId: number; workerName: string } | null;
+  onClose: () => void;
+  onSent: () => void;
+}) {
+  const [shifts, setShifts] = useState<OwnerShift[]>([]);
+  const [selectedShiftId, setSelectedShiftId] = useState<number | null>(null);
+  const [message, setMessage] = useState('');
+  const [expiresMinutes, setExpiresMinutes] = useState(60);
+  const [busy, setBusy] = useState(false);
+
+  React.useEffect(() => {
+    if (!visible) return;
+    setSelectedShiftId(null);
+    setMessage('');
+    api<OwnerShift[]>('/api/owner/shifts')
+      .then((data) => setShifts(data.filter((s) => s.status === 'OPEN')))
+      .catch(() => setShifts([]));
+  }, [visible]);
+
+  function notify(msg: string) {
+    if (Platform.OS === 'web') window.alert(msg);
+    else Alert.alert('안내', msg);
+  }
+
+  async function submit() {
+    if (!target || !selectedShiftId) {
+      notify('초대할 시프트를 선택해주세요');
+      return;
+    }
+    setBusy(true);
+    try {
+      await api('/api/owner/shift-invitations', {
+        method: 'POST',
+        body: {
+          shiftId: selectedShiftId,
+          workerId: target.workerId,
+          message: message.trim() || null,
+          expiresInMinutes: expiresMinutes,
+        },
+      });
+      onSent();
+    } catch (e) {
+      notify((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+      <View
+        style={{
+          flex: 1, backgroundColor: 'rgba(0,0,0,0.5)',
+          alignItems: 'center', justifyContent: 'center', padding: spacing.lg,
+        }}
+      >
+        <View
+          style={{
+            backgroundColor: colors.surface,
+            borderRadius: radius.lg, padding: spacing.xl,
+            width: '100%', maxWidth: 460, maxHeight: '90%',
+          }}
+        >
+          <ScrollView showsVerticalScrollIndicator={false}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+              <Text style={{ fontSize: 24 }}>📨</Text>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.h2, { fontSize: 18 }]}>
+                  {target?.workerName ?? '워커'} 님에게 시프트 제안
+                </Text>
+                <Text style={[styles.subtitle, { fontSize: 11, marginTop: 2 }]}>
+                  워커가 1탭 수락하면 매칭 즉시 확정 (지원 단계 스킵)
+                </Text>
+              </View>
+            </View>
+
+            <Text style={{ fontSize: 12, fontWeight: '700', color: colors.textMuted, marginBottom: 6 }}>
+              제안할 시프트 (모집중 시프트만)
+            </Text>
+            {shifts.length === 0 ? (
+              <View style={{ padding: 16, alignItems: 'center' }}>
+                <Text style={[styles.bodyMuted, { fontSize: 12 }]}>
+                  등록된 모집중 시프트가 없어요. 시프트 먼저 등록 후 제안해주세요.
+                </Text>
+              </View>
+            ) : (
+              <View style={{ gap: 6, marginBottom: 14 }}>
+                {shifts.map((s) => {
+                  const active = selectedShiftId === s.id;
+                  return (
+                    <Pressable
+                      key={s.id}
+                      onPress={() => setSelectedShiftId(s.id)}
+                      style={({ pressed }) => [
+                        {
+                          padding: 12, borderRadius: radius.md,
+                          backgroundColor: active ? colors.primarySoft : colors.surface,
+                          borderWidth: 1.5,
+                          borderColor: active ? colors.primary : colors.border,
+                        },
+                        pressed && { opacity: 0.85 },
+                      ]}
+                    >
+                      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                        <Text style={{ fontSize: 13, fontWeight: '800', color: colors.text }}>
+                          {s.cafeName}
+                        </Text>
+                        {active ? <Text style={{ color: colors.primary }}>✓</Text> : null}
+                      </View>
+                      <Text style={[styles.bodyMuted, { fontSize: 11, marginTop: 2 }]}>
+                        {fmtDateTime(s.startAt)} · 시급 {fmtKRW(s.hourlyWage)} · {s.description}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            )}
+
+            <Text style={{ fontSize: 12, fontWeight: '700', color: colors.textMuted, marginBottom: 6 }}>
+              메시지 (선택)
+            </Text>
+            <TextInput
+              style={[styles.input, { minHeight: 60, textAlignVertical: 'top' }]}
+              value={message}
+              onChangeText={setMessage}
+              placeholder="예: 지난번 잘해주셔서 다시 모시고 싶어요"
+              placeholderTextColor={colors.textLight}
+              multiline
+            />
+
+            <Text style={{ fontSize: 12, fontWeight: '700', color: colors.textMuted, marginBottom: 6 }}>
+              응답 마감
+            </Text>
+            <View style={{ flexDirection: 'row', gap: 6, marginBottom: 16 }}>
+              {[30, 60, 120, 240].map((m) => {
+                const active = expiresMinutes === m;
+                return (
+                  <Pressable
+                    key={m}
+                    onPress={() => setExpiresMinutes(m)}
+                    style={[styles.chip, active && { backgroundColor: colors.primary, borderColor: colors.primary }]}
+                  >
+                    <Text style={[styles.chipText, active && { color: '#fff' }]}>{m}분</Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+
+            <View style={{ flexDirection: 'row', gap: 8 }}>
+              <Pressable style={[styles.buttonSecondary, { flex: 1 }]} onPress={onClose} disabled={busy}>
+                <Text style={styles.buttonSecondaryText}>취소</Text>
+              </Pressable>
+              <Pressable
+                style={[styles.buttonPrimary, { flex: 1 }, (busy || !selectedShiftId) && { opacity: 0.5 }]}
+                onPress={submit}
+                disabled={busy || !selectedShiftId}
+              >
+                <Text style={styles.buttonPrimaryText}>{busy ? '발송 중...' : '초대 발송'}</Text>
+              </Pressable>
+            </View>
+          </ScrollView>
+        </View>
+      </View>
+    </Modal>
   );
 }

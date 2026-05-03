@@ -43,6 +43,14 @@ public interface PayoutRepository extends JpaRepository<Payout, Long> {
                                              @Param("start") LocalDateTime start,
                                              @Param("end") LocalDateTime end);
 
+    /** 점주 전체 매장의 모든 payout — 상태 무관, triggerAt 최신순 */
+    @Query("""
+            select p from Payout p
+            where p.match.shift.cafe.owner.id = :ownerId
+            order by p.triggerAt desc
+            """)
+    List<Payout> findAllByOwnerId(@Param("ownerId") Long ownerId);
+
     @Query("""
             select p from Payout p
             where p.match.shift.cafe.id = :cafeId

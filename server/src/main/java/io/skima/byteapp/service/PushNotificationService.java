@@ -2,10 +2,13 @@ package io.skima.byteapp.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.skima.byteapp.domain.User;
+import io.skima.byteapp.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -20,7 +23,8 @@ import java.util.Map;
  * Expo Push Notification 발송 — 클라이언트가 expoPushToken 을 등록한 사용자에게 푸시.
  * 외부 푸시 서비스(APNs/FCM) 의존 없이 Expo Push API 1개로 처리.
  *
- * <p>호출은 @Async 로 백그라운드 처리 — DB 트랜잭션과 분리.
+ * <p>호출은 @Async 로 백그라운드 처리. 새 스레드에서 detached entity 의 lazy collection 접근하면
+ * "ResultSet closed" 에러 — 따라서 @Transactional(REQUIRES_NEW) 로 새 트랜잭션 열어 ID로 refetch.
  *
  * <p>Expo 문서: https://docs.expo.dev/push-notifications/sending-notifications/
  */
@@ -34,17 +38,26 @@ public class PushNotificationService {
             .connectTimeout(Duration.ofSeconds(5))
             .build();
     private final ObjectMapper objectMapper = new ObjectMapper();
+    private final UserRepository userRepository;
 
     @Async
+    @Transactional(propagation = Propagation.REQUIRES_NEW, readOnly = true)
     public void sendToUser(User user, String title, String body, String route) {
-        String token = user.getExpoPushToken();
-        if (token == null || token.isBlank()) return;
-        sendRaw(token, title, body, route);
+        if (user == null) return;
+        // 새 트랜잭션에서 refetch — async 스레드는 원래 세션과 분리됨
+        userRepository.findById(user.getId()).ifPresent(u -> {
+            String token = u.getExpoPushToken();
+            if (token != null && !token.isBlank()) sendRaw(token, title, body, route);
+        });
     }
 
     @Async
+    @Transactional(propagation = Propagation.REQUIRES_NEW, readOnly = true)
     public void sendToUsers(List<User> users, String title, String body, String route) {
-        for (User u : users) {
+        if (users == null || users.isEmpty()) return;
+        List<Long> ids = users.stream().map(User::getId).toList();
+        var fresh = userRepository.findAllById(ids);
+        for (User u : fresh) {
             String token = u.getExpoPushToken();
             if (token != null && !token.isBlank()) {
                 sendRaw(token, title, body, route);

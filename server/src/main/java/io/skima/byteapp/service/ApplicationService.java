@@ -41,6 +41,14 @@ public class ApplicationService {
                     throw BusinessException.conflict("이미 지원한 시프트입니다");
                 });
 
+        // 보건증 요구 시프트는 VERIFIED 보건증 필수
+        if (shift.getRequirements() != null && shift.getRequirements().contains("HEALTH_CERT")) {
+            if (worker.getHealthCertStatus() != io.skima.byteapp.domain.HealthCertStatus.VERIFIED) {
+                throw BusinessException.badRequest(
+                        "이 시프트는 보건증이 필수입니다. 마이 → 내 프로필에서 보건증을 업로드하세요");
+            }
+        }
+
         ShiftApplication app = ShiftApplication.builder()
                 .shift(shift)
                 .worker(worker)

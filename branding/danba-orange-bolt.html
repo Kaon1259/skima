@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <title>단바 — 오렌지 + 번개 통합 후보</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Pretendard', 'Apple SD Gothic Neo', sans-serif;
+      background: #f5f5f5;
+      padding: 40px;
+      margin: 0;
+    }
+    h1 { font-size: 22px; margin-bottom: 8px; }
+    p.guide { color: #555; font-size: 14px; margin-bottom: 32px; }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+      gap: 32px;
+      max-width: 1500px;
+    }
+    .card {
+      background: white; border-radius: 16px; padding: 24px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+    }
+    .card h2 { font-size: 16px; margin: 0 0 4px; }
+    .card p { font-size: 12px; color: #888; margin: 0 0 16px; }
+    .icon-frame {
+      width: 256px; height: 256px;
+      border-radius: 56px;
+      overflow: hidden;
+      margin: 0 auto;
+      position: relative;
+    }
+    .icon-frame > * { width: 100%; height: 100%; }
+
+    /* === Variant 1 — Big Bolt Background (가장 직관적 "섞기") === */
+    .v1 {
+      background: linear-gradient(135deg, #FB923C 0%, #EA580C 100%);
+      display: flex; align-items: center; justify-content: center;
+      position: relative;
+    }
+    .v1 svg {
+      position: absolute;
+      width: 90%; height: 90%;
+      top: 5%; left: 5%;
+      filter: drop-shadow(0 6px 14px rgba(0,0,0,0.25));
+    }
+    .v1 svg path {
+      fill: #FFEB3B;
+    }
+    .v1 .text {
+      font-weight: 900;
+      font-size: 110px;
+      color: white;
+      letter-spacing: -6px;
+      z-index: 2;
+      text-shadow: 0 4px 16px rgba(0,0,0,0.35);
+    }
+
+    /* === Variant 2 — Bolt is "단" Vertical Stroke (창의적) === */
+    .v2 {
+      background: linear-gradient(135deg, #FB923C 0%, #EA580C 100%);
+      display: flex; align-items: center; justify-content: center;
+      position: relative;
+    }
+    .v2 .composed {
+      position: relative;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .v2 .bolt-svg {
+      width: 80px; height: 130px;
+    }
+    .v2 .bolt-svg path {
+      fill: #FFEB3B;
+      filter: drop-shadow(0 4px 8px rgba(0,0,0,0.25));
+    }
+    .v2 .ba {
+      font-weight: 900;
+      font-size: 110px;
+      color: white;
+      letter-spacing: -6px;
+    }
+
+    /* === Variant 3 — Diagonal Bolt Cut === */
+    .v3 {
+      position: relative;
+      overflow: hidden;
+    }
+    .v3 .bg-orange {
+      position: absolute; inset: 0;
+      background: linear-gradient(135deg, #FB923C 0%, #EA580C 100%);
+    }
+    .v3 .bg-yellow {
+      position: absolute; inset: 0;
+      background: #FFC107;
+      clip-path: polygon(60% 0%, 100% 0%, 70% 50%, 100% 50%, 35% 100%, 60% 60%, 35% 60%);
+    }
+    .v3 .text {
+      position: absolute; inset: 0;
+      display: flex; align-items: center; justify-content: center;
+      font-weight: 900;
+      font-size: 100px;
+      color: white;
+      letter-spacing: -6px;
+      text-shadow: 0 4px 12px rgba(0,0,0,0.3);
+      z-index: 3;
+    }
+
+    /* === Variant 4 — Bolt + Text Side-by-Side === */
+    .v4 {
+      background: linear-gradient(135deg, #FB923C 0%, #EA580C 100%);
+      display: flex; align-items: center; justify-content: center;
+      gap: 8px;
+    }
+    .v4 svg {
+      width: 70px; height: 110px;
+    }
+    .v4 svg path {
+      fill: #FFEB3B;
+      filter: drop-shadow(0 4px 8px rgba(0,0,0,0.25));
+    }
+    .v4 .text {
+      font-weight: 900;
+      font-size: 100px;
+      color: white;
+      letter-spacing: -6px;
+    }
+
+    /* === Variant 5 — Circle + Bolt + 단바 (원형 강조) === */
+    .v5 {
+      background: #FFF7ED;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .v5 .circle {
+      width: 78%; height: 78%;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #FB923C 0%, #EA580C 100%);
+      display: flex; align-items: center; justify-content: center;
+      position: relative;
+      box-shadow: 0 8px 24px rgba(234, 88, 12, 0.4);
+    }
+    .v5 svg {
+      position: absolute;
+      width: 35%; height: 50%;
+      top: 8%; right: 8%;
+    }
+    .v5 svg path {
+      fill: #FFEB3B;
+    }
+    .v5 .text {
+      font-weight: 900;
+      font-size: 86px;
+      color: white;
+      letter-spacing: -4px;
+    }
+
+    /* === Variant 6 — 단 letter integrated bolt (실험적) === */
+    .v6 {
+      background: linear-gradient(135deg, #FB923C 0%, #EA580C 100%);
+      display: flex; align-items: center; justify-content: center;
+      position: relative;
+    }
+    .v6 .composed {
+      position: relative;
+      font-weight: 900;
+      font-size: 110px;
+      color: white;
+      letter-spacing: -6px;
+      line-height: 1;
+    }
+    .v6 .composed .bolt-overlay {
+      position: absolute;
+      top: -12px;
+      left: 22px;
+      width: 48px;
+      height: 90px;
+      pointer-events: none;
+    }
+    .v6 .composed .bolt-overlay path {
+      fill: #FFEB3B;
+      stroke: #EA580C;
+      stroke-width: 3;
+    }
+
+    .actions { margin-top: 16px; font-size: 11px; color: #888; text-align: center; }
+  </style>
+</head>
+<body>
+  <h1>⚡ 단바 — 오렌지 + 번개 통합 6종</h1>
+  <p class="guide">
+    번개를 더 적극적으로 섞은 디자인. F12 → 요소 선택 → "Capture node screenshot" 으로 PNG 추출.
+  </p>
+
+  <div class="grid">
+    <div class="card">
+      <h2>1 · 큰 번개 배경 (가장 직관적)</h2>
+      <p>번개를 배경에 크게, 단바 텍스트 오버레이</p>
+      <div class="icon-frame">
+        <div class="v1">
+          <svg viewBox="0 0 200 200" preserveAspectRatio="xMidYMid meet">
+            <path d="M115 10 L70 110 L100 110 L60 200 L150 80 L115 80 Z"/>
+          </svg>
+          <div class="text">단바</div>
+        </div>
+      </div>
+      <div class="actions">번개가 부드럽게 배경 — 워크마크 스타일</div>
+    </div>
+
+    <div class="card">
+      <h2>2 · 번개를 단바 옆에 (병렬)</h2>
+      <p>번개 = 글자 한 자처럼 동등 비중</p>
+      <div class="icon-frame">
+        <div class="v2">
+          <div class="composed">
+            <svg class="bolt-svg" viewBox="0 0 80 130">
+              <path d="M50 5 L15 70 L40 70 L25 125 L70 55 L45 55 L55 5 Z"/>
+            </svg>
+            <span class="ba">단바</span>
+          </div>
+        </div>
+      </div>
+      <div class="actions">⚡ 단바 — 균형 있는 워드마크</div>
+    </div>
+
+    <div class="card">
+      <h2>3 · 사선 번개 컷 (다이내믹)</h2>
+      <p>번개 모양으로 두 색 분할, 글자는 위에 오버레이</p>
+      <div class="icon-frame">
+        <div class="v3">
+          <div class="bg-orange"></div>
+          <div class="bg-yellow"></div>
+          <div class="text">단바</div>
+        </div>
+      </div>
+      <div class="actions">스피드 강조, 그래픽적 임팩트</div>
+    </div>
+
+    <div class="card">
+      <h2>4 · 노란 번개 + 흰 단바 (대비 강함)</h2>
+      <p>번개는 노랑(에너지), 단바는 흰색</p>
+      <div class="icon-frame">
+        <div class="v4">
+          <svg viewBox="0 0 70 110">
+            <path d="M40 5 L10 60 L30 60 L20 105 L60 50 L40 50 L50 5 Z"/>
+          </svg>
+          <div class="text">단바</div>
+        </div>
+      </div>
+      <div class="actions">색 대비로 번개·이름 모두 또렷</div>
+    </div>
+
+    <div class="card">
+      <h2>5 · 원형 + 우상단 번개</h2>
+      <p>iOS 앱 아이콘 친화 — 원형 자체가 액센트</p>
+      <div class="icon-frame">
+        <div class="v5">
+          <div class="circle">
+            <svg viewBox="0 0 80 130">
+              <path d="M50 5 L15 70 L40 70 L25 125 L70 55 L45 55 L55 5 Z"/>
+            </svg>
+            <div class="text">단바</div>
+          </div>
+        </div>
+      </div>
+      <div class="actions">베이지 배경 + 오렌지 원 + 노란 번개</div>
+    </div>
+
+    <div class="card">
+      <h2>6 · 단 글자 위에 번개 오버레이 (실험적)</h2>
+      <p>번개가 글자 위에 살짝 겹침 — 입체감</p>
+      <div class="icon-frame">
+        <div class="v6">
+          <div class="composed">
+            단바
+            <svg class="bolt-overlay" viewBox="0 0 48 90">
+              <path d="M30 0 L8 50 L24 50 L16 90 L42 38 L26 38 L34 0 Z"/>
+            </svg>
+          </div>
+        </div>
+      </div>
+      <div class="actions">번개가 글자 사이를 가로지름</div>
+    </div>
+  </div>
+
+  <p class="guide" style="margin-top: 40px;">
+    💡 <strong>추출:</strong> Chrome F12 → 화살표 아이콘으로 <code>.icon-frame</code> 선택 → 우클릭 →
+    "Capture node screenshot" → PNG 자동 다운로드 (정사각).<br>
+    <strong>512×512 필요시:</strong> CSS의 <code>.icon-frame { width: 512px; height: 512px; }</code> 로 변경 후 폰트도 ×2 (예: 110px → 220px), 캡처.
+  </p>
+</body>
+</html>

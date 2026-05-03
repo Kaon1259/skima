@@ -4,6 +4,10 @@ server:
 spring:
   application:
     name: skima-byte
+  # dev 기본 프로필 — application-local.yml(gitignored) 의 카카오/시크릿 자동 주입.
+  # 운영 전환 시 SPRING_PROFILES_ACTIVE=prod 등으로 override.
+  profiles:
+    active: ${SPRING_PROFILES_ACTIVE:local}
   datasource:
     url: jdbc:mysql://localhost:3306/skima_byte?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Seoul&useUnicode=true&characterEncoding=UTF-8
     username: root
@@ -27,6 +31,20 @@ spring:
     serialization:
       write-dates-as-timestamps: false
     time-zone: Asia/Seoul
+
+  servlet:
+    multipart:
+      max-file-size: 10MB
+      max-request-size: 12MB
+
+# AWS S3 — 워커 프로필 / 매장 사진 업로드용.
+# 자격증명은 env(AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY) 또는 IAM role 로만 주입 (yml 절대 X).
+# 버킷/리전은 운영 시 env 로 override 가능.
+cloud:
+  aws:
+    s3:
+      bucket: ${AWS_S3_BUCKET:skimabyte-profile}
+      region: ${AWS_S3_REGION:ap-northeast-2}
 
 # Skima Byte 비즈니스 룰 (킥의 정량 임계값)
 skima:
@@ -55,6 +73,9 @@ kakao:
   default-redirect-uri: ${KAKAO_REDIRECT_URI:http://localhost:8081/auth/kakao/callback}
 
 logging:
+  charset:
+    console: UTF-8
+    file: UTF-8
   level:
     io.skima.byteapp: DEBUG
     org.hibernate.SQL: WARN

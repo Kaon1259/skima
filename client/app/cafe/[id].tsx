@@ -2,7 +2,11 @@ import { useCallback, useState } from 'react';
 import { Alert, FlatList, Platform, Pressable, RefreshControl, Text, View } from 'react-native';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 
+import { Image as ExpoImage } from 'expo-image';
+
 import { Icon } from '@/components/Icon';
+import { SkeletonCard } from '@/components/Skeleton';
+import { TrustScoreBadge } from '@/components/TrustScoreBadge';
 import { useAuth } from '@/lib/auth';
 import { api, ApiError } from '@/lib/api';
 import {
@@ -23,7 +27,9 @@ export default function CafeDetailScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [busyShiftId, setBusyShiftId] = useState<number | null>(null);
   const [isFavorite, setIsFavorite] = useState(false);
+  const [isBlocked, setIsBlocked] = useState(false);
   const [busyFav, setBusyFav] = useState(false);
+  const [busyBlock, setBusyBlock] = useState(false);
 
   const isWorkerInit = auth?.role === 'WORKER';
 
@@ -31,14 +37,18 @@ export default function CafeDetailScreen() {
     if (!cafeId) return;
     setRefreshing(true);
     try {
-      const [data, favIds] = await Promise.all([
+      const [data, favIds, blockedIds] = await Promise.all([
         api<CafeDetail>(`/api/cafes/${cafeId}/detail`),
         isWorkerInit
           ? api<number[]>('/api/worker/favorites/cafes').catch(() => [] as number[])
           : Promise.resolve([] as number[]),
+        isWorkerInit
+          ? api<number[]>('/api/worker/blocked/cafes').catch(() => [] as number[])
+          : Promise.resolve([] as number[]),
       ]);
       setDetail(data);
       setIsFavorite(favIds.includes(Number(cafeId)));
+      setIsBlocked(blockedIds.includes(Number(cafeId)));
     } catch (e) {
       notify((e as Error).message);
     } finally {
@@ -50,6 +60,7 @@ export default function CafeDetailScreen() {
     if (!cafeId || busyFav) return;
     const was = isFavorite;
     setIsFavorite(!was);
+    if (!was) setIsBlocked(false); // 단골 등록 시 차단 자동 해제
     setBusyFav(true);
     try {
       await api(`/api/worker/favorites/cafes/${cafeId}`, {
@@ -60,6 +71,25 @@ export default function CafeDetailScreen() {
       notify((e as Error).message);
     } finally {
       setBusyFav(false);
+    }
+  }
+
+  async function toggleBlock() {
+    if (!cafeId || busyBlock) return;
+    const was = isBlocked;
+    setIsBlocked(!was);
+    if (!was) setIsFavorite(false); // 차단 시 단골 자동 해제
+    setBusyBlock(true);
+    try {
+      await api(`/api/worker/blocked/cafes/${cafeId}`, {
+        method: was ? 'DELETE' : 'POST',
+        body: was ? undefined : {},
+      });
+    } catch (e) {
+      setIsBlocked(was);
+      notify((e as Error).message);
+    } finally {
+      setBusyBlock(false);
     }
   }
 
@@ -88,8 +118,10 @@ export default function CafeDetailScreen() {
 
   if (!detail) {
     return (
-      <View style={[styles.screenPadded, { alignItems: 'center', justifyContent: 'center' }]}>
-        <Text style={styles.bodyMuted}>매장 정보를 불러오는 중...</Text>
+      <View style={{ flex: 1, backgroundColor: colors.surfaceAlt, padding: spacing.lg }}>
+        <SkeletonCard />
+        <SkeletonCard />
+        <SkeletonCard />
       </View>
     );
   }
@@ -109,38 +141,71 @@ export default function CafeDetailScreen() {
         <View>
           <CafeHeader detail={detail} />
           {isWorker ? (
-            <Pressable
-              onPress={toggleFavorite}
-              disabled={busyFav}
-              style={({ pressed }) => [
-                {
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: 8,
-                  paddingVertical: 12,
-                  borderRadius: radius.md,
-                  borderWidth: 1.5,
-                  borderColor: isFavorite ? colors.warn : colors.border,
-                  backgroundColor: isFavorite ? colors.warnSoft : colors.surface,
-                  marginBottom: spacing.md,
-                },
-                pressed && { opacity: 0.85 },
-              ]}
-            >
-              <Text style={{ fontSize: 18 }}>{isFavorite ? '⭐' : '☆'}</Text>
-              <Text
-                style={{
-                  fontSize: 13,
-                  fontWeight: '800',
-                  color: isFavorite ? colors.warn : colors.text,
-                }}
+            <View style={{ flexDirection: 'row', gap: 8, marginBottom: spacing.md }}>
+              <Pressable
+                onPress={toggleFavorite}
+                disabled={busyFav}
+                style={({ pressed }) => [
+                  {
+                    flex: 1,
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: 6,
+                    paddingVertical: 10,
+                    borderRadius: radius.md,
+                    borderWidth: 1.5,
+                    borderColor: isFavorite ? colors.warn : colors.border,
+                    backgroundColor: isFavorite ? colors.warnSoft : colors.surface,
+                  },
+                  pressed && { opacity: 0.85 },
+                ]}
               >
-                {isFavorite ? '단골 매장 — 새 시프트 알림 받는 중' : '단골 매장으로 등록'}
-              </Text>
-            </Pressable>
+                <Text style={{ fontSize: 16 }}>{isFavorite ? '⭐' : '☆'}</Text>
+                <Text
+                  style={{
+                    fontSize: 12,
+                    fontWeight: '800',
+                    color: isFavorite ? colors.warn : colors.text,
+                  }}
+                >
+                  {isFavorite ? '단골 — 알림 받는 중' : '단골 매장 등록'}
+                </Text>
+              </Pressable>
+              <Pressable
+                onPress={toggleBlock}
+                disabled={busyBlock}
+                style={({ pressed }) => [
+                  {
+                    flex: 1,
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: 6,
+                    paddingVertical: 10,
+                    borderRadius: radius.md,
+                    borderWidth: 1.5,
+                    borderColor: isBlocked ? colors.danger : colors.border,
+                    backgroundColor: isBlocked ? colors.dangerSoft : colors.surface,
+                  },
+                  pressed && { opacity: 0.85 },
+                ]}
+              >
+                <Text style={{ fontSize: 16 }}>{isBlocked ? '🚫' : '⊘'}</Text>
+                <Text
+                  style={{
+                    fontSize: 12,
+                    fontWeight: '800',
+                    color: isBlocked ? colors.danger : colors.text,
+                  }}
+                >
+                  {isBlocked ? '차단됨 — 시프트 숨김' : '🚫 차단'}
+                </Text>
+              </Pressable>
+            </View>
           ) : null}
           <SignalsCard detail={detail} />
+          <AboutCard detail={detail} />
           {isOwnerView ? <OwnerMonthCard detail={detail} /> : null}
           {isOwnerView && detail.ownerView!.regulars.length > 0 ? (
             <RegularsCard detail={detail} />
@@ -179,8 +244,15 @@ export default function CafeDetailScreen() {
 
 function CafeHeader({ detail }: { detail: CafeDetail }) {
   return (
-    <View style={[styles.card, { marginBottom: spacing.md }]}>
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+    <View style={[styles.card, { marginBottom: spacing.md, padding: detail.imageUrl ? 0 : 16, overflow: 'hidden' }]}>
+      {detail.imageUrl ? (
+        <ExpoImage
+          source={{ uri: detail.imageUrl }}
+          style={{ width: '100%', height: 180, backgroundColor: colors.surfaceMuted }}
+          contentFit="cover"
+        />
+      ) : null}
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, padding: detail.imageUrl ? 16 : 0 }}>
         <View
           style={{
             width: 56,
@@ -196,7 +268,10 @@ function CafeHeader({ detail }: { detail: CafeDetail }) {
           </Text>
         </View>
         <View style={{ flex: 1 }}>
-          <Text style={[styles.h2, { fontSize: 20 }]}>{detail.name}</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+            <Text style={[styles.h2, { fontSize: 20 }]}>{detail.name}</Text>
+            <TrustScoreBadge score={detail.trustScore} size="md" />
+          </View>
           <Text style={[styles.bodyMuted, { fontSize: 12, marginTop: 2 }]}>
             {CAFE_TYPE_LABEL[detail.cafeType]}
             {detail.brandName ? ` · ${detail.brandName}` : ''}
@@ -214,26 +289,94 @@ function CafeHeader({ detail }: { detail: CafeDetail }) {
 }
 
 function SignalsCard({ detail }: { detail: CafeDetail }) {
+  const rehireSub = detail.rehireRate != null
+    ? detail.rehireRate >= 0.4 ? '단골 많음' : detail.rehireRate >= 0.2 ? '재방문 있음' : '신규 위주'
+    : '데이터 부족';
   return (
-    <View style={[styles.card, { marginBottom: spacing.md, flexDirection: 'row', gap: 8 }]}>
-      <Signal
-        label="평균 별점"
-        value={detail.avgRating != null ? `★ ${detail.avgRating.toFixed(1)}` : '신규'}
-        sub={detail.ratingsCount != null ? `${detail.ratingsCount}건` : '평가 없음'}
-        color={colors.warn}
-      />
-      <Signal
-        label="노쇼율"
-        value={detail.noShowRate != null ? fmtPercent(detail.noShowRate) : '0%'}
-        sub={detail.noShowRate && detail.noShowRate > 0 ? '주의' : '깨끗'}
-        color={detail.noShowRate && detail.noShowRate > 0 ? colors.danger : colors.success}
-      />
-      <Signal
-        label="완료 시프트"
-        value={`${detail.totalCompletedShifts}회`}
-        sub="누적"
-        color={colors.info}
-      />
+    <View style={[styles.card, { marginBottom: spacing.md, gap: 12 }]}>
+      <View style={{ flexDirection: 'row', gap: 8 }}>
+        <Signal
+          label="평균 별점"
+          value={detail.avgRating != null ? `★ ${detail.avgRating.toFixed(1)}` : '신규'}
+          sub={detail.ratingsCount != null ? `${detail.ratingsCount}건` : '평가 없음'}
+          color={colors.warn}
+        />
+        <Signal
+          label="노쇼율"
+          value={detail.noShowRate != null ? fmtPercent(detail.noShowRate) : '0%'}
+          sub={detail.noShowRate && detail.noShowRate > 0 ? '주의' : '깨끗'}
+          color={detail.noShowRate && detail.noShowRate > 0 ? colors.danger : colors.success}
+        />
+        <Signal
+          label="완료 시프트"
+          value={`${detail.totalCompletedShifts}회`}
+          sub={`누적 ${detail.totalMatches}건`}
+          color={colors.info}
+        />
+      </View>
+      <View style={{ flexDirection: 'row', gap: 8, paddingTop: 10, borderTopWidth: 1, borderTopColor: colors.border }}>
+        <Signal
+          label="재고용률"
+          value={detail.rehireRate != null ? fmtPercent(detail.rehireRate) : '—'}
+          sub={rehireSub}
+          color={detail.rehireRate != null && detail.rehireRate >= 0.3 ? colors.success : colors.textMuted}
+        />
+        <Signal
+          label="단골 워커"
+          value={detail.regularsCount != null ? `${detail.regularsCount}명` : '0명'}
+          sub="2회 이상"
+          color={colors.primary}
+        />
+        <Signal
+          label="평균 일급"
+          value={detail.avgWageGross != null ? fmtKRW(detail.avgWageGross) : '—'}
+          sub="최근 30일"
+          color={colors.text}
+        />
+      </View>
+    </View>
+  );
+}
+
+function AboutCard({ detail }: { detail: CafeDetail }) {
+  const hasAny = detail.openHours || detail.seatCount != null || detail.phone || detail.description;
+  if (!hasAny) return null;
+  return (
+    <View style={[styles.card, { marginBottom: spacing.md }]}>
+      <Text style={[styles.title, { marginBottom: 8 }]}>매장 정보</Text>
+      {detail.openHours ? (
+        <InfoRow icon="🕒" label="영업시간" value={detail.openHours} />
+      ) : null}
+      {detail.seatCount != null ? (
+        <InfoRow icon="🪑" label="좌석 수" value={`${detail.seatCount}석`} />
+      ) : null}
+      {detail.phone ? (
+        <InfoRow icon="☎️" label="매장 전화" value={detail.phone} />
+      ) : null}
+      {detail.description ? (
+        <View style={{ marginTop: 10, padding: 10, borderRadius: radius.md, backgroundColor: colors.surfaceAlt }}>
+          <Text style={{ fontSize: 11, color: colors.textMuted, fontWeight: '700', marginBottom: 4 }}>
+            📝 매장 소개
+          </Text>
+          <Text style={{ fontSize: 13, color: colors.text, lineHeight: 19 }}>
+            {detail.description}
+          </Text>
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
+function InfoRow({ icon, label, value }: { icon: string; label: string; value: string }) {
+  return (
+    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 4 }}>
+      <Text style={{ fontSize: 14 }}>{icon}</Text>
+      <Text style={{ fontSize: 12, color: colors.textMuted, fontWeight: '700', minWidth: 60 }}>
+        {label}
+      </Text>
+      <Text style={{ flex: 1, fontSize: 13, color: colors.text, fontWeight: '600' }}>
+        {value}
+      </Text>
     </View>
   );
 }

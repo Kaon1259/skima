@@ -42,12 +42,33 @@ public class Cafe {
     @Column(name = "longitude")
     private Double longitude;
 
+    /** 영업시간 자유 입력 — 예: "07:00-22:00" 또는 "평일 08-21 / 주말 09-22" */
+    @Column(name = "open_hours", length = 128)
+    private String openHours;
+
+    /** 좌석 수 — 매장 규모/혼잡도 가늠용 */
+    @Column(name = "seat_count")
+    private Integer seatCount;
+
+    /** 매장 대표 전화 (점주가 워커에게 공개) */
+    @Column(name = "phone", length = 32)
+    private String phone;
+
+    /** 사장이 직접 작성한 매장 소개 — 손님유형/POS/식사휴게/유의사항 등 */
+    @Column(name = "description", length = 1024)
+    private String description;
+
+    /** 매장 대표 사진 — base64 data URL 또는 외부 URL */
+    @Column(name = "image_url", columnDefinition = "MEDIUMTEXT")
+    private String imageUrl;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
     @Builder
     public Cafe(User owner, String name, String address, CafeType cafeType, String brandKey,
-                Double latitude, Double longitude) {
+                Double latitude, Double longitude,
+                String openHours, Integer seatCount, String phone, String description) {
         this.owner = owner;
         this.name = name;
         this.address = address;
@@ -55,6 +76,10 @@ public class Cafe {
         this.brandKey = brandKey;
         this.latitude = latitude;
         this.longitude = longitude;
+        this.openHours = openHours;
+        this.seatCount = seatCount;
+        this.phone = phone;
+        this.description = description;
     }
 
     @PrePersist
@@ -72,5 +97,16 @@ public class Cafe {
     public void updateLocation(Double latitude, Double longitude) {
         this.latitude = latitude;
         this.longitude = longitude;
+    }
+
+    public void updateProfile(String openHours, Integer seatCount, String phone, String description) {
+        this.openHours = openHours;
+        this.seatCount = seatCount;
+        this.phone = phone;
+        this.description = description;
+    }
+
+    public void setImageUrl(String imageUrl) {
+        this.imageUrl = (imageUrl != null && !imageUrl.isBlank()) ? imageUrl : null;
     }
 }

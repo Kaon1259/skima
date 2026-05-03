@@ -68,6 +68,45 @@ public class CafeDetailService {
         int completedTotal = (int) cafeShifts.stream()
                 .filter(s -> s.getStatus() == ShiftStatus.COMPLETED).count();
 
+        // 평판 시그널: 재고용률 + 평균 일급 + 단골 수
+        Map<Long, Long> matchesByWorker = new HashMap<>();
+        for (ShiftMatch m : allMatches) {
+            if (m.getStatus() == MatchStatus.NO_SHOW || m.getStatus() == MatchStatus.CANCELED) continue;
+            matchesByWorker.merge(m.getWorker().getId(), 1L, Long::sum);
+        }
+        long uniqueWorkers = matchesByWorker.size();
+        long regulars = matchesByWorker.values().stream().filter(v -> v >= 2).count();
+        Double rehireRate = uniqueWorkers == 0 ? null : (double) regulars / uniqueWorkers;
+        Integer regularsCount = uniqueWorkers == 0 ? null : (int) regulars;
+
+        // 평균 일급 (최근 30일 완료된 payout)
+        LocalDateTime since = LocalDateTime.now().minusDays(30);
+        LocalDateTime nowEnd = LocalDateTime.now().plusDays(1);
+        List<Payout> recentPayouts = payoutRepository.findCompletedByCafeInRange(cafeId, since, nowEnd);
+        Long avgWageGross = recentPayouts.isEmpty() ? null
+                : recentPayouts.stream().mapToLong(p -> nz(p.getGrossAmount())).sum() / recentPayouts.size();
+
+        // 정산 신뢰도 — 점주 명시 승인 비율 (자동 30분 대기 비율의 반대)
+        // approvedAt != null 인 모든 payout 중 autoApproved=false 인 비율
+        long approvedTotal = recentPayouts.stream().filter(p -> p.getApprovedAt() != null).count();
+        long manualApproved = recentPayouts.stream()
+                .filter(p -> p.getApprovedAt() != null && !p.isAutoApproved()).count();
+        Double payoutManualRate = approvedTotal == 0 ? null : (double) manualApproved / approvedTotal;
+
+        // 종합 신뢰도 점수 — 별점35 + 재고용25 + (1-노쇼)15 + 정산빠른승인15 + 볼륨10
+        Integer cafeTrustScore;
+        if (allMatches.size() < 5) {
+            cafeTrustScore = null;
+        } else {
+            double s = 0;
+            s += (avgRating != null ? avgRating / 5.0 : 0) * 35;
+            s += (rehireRate != null ? rehireRate : 0) * 25;
+            s += (1.0 - (noShowRate != null ? noShowRate : 0)) * 15;
+            s += (payoutManualRate != null ? payoutManualRate : 0.5) * 15; // null이면 중립 0.5
+            s += Math.min(allMatches.size() / 20.0, 1.0) * 10;
+            cafeTrustScore = (int) Math.round(s);
+        }
+
         // 최신 리뷰 5건
         List<RatingResponse> recentReviews = received.stream()
                 .limit(5)
@@ -98,10 +137,21 @@ public class CafeDetailService {
                 brand != null ? brand.color() : null,
                 brand != null ? brand.name() : null,
                 cafe.getOwner().getName(),
+                cafe.getOpenHours(),
+                cafe.getSeatCount(),
+                cafe.getPhone(),
+                cafe.getDescription(),
+                cafe.getImageUrl(),
                 avgRating,
                 ratingsCount,
                 noShowRate,
                 completedTotal,
+                allMatches.size(),
+                rehireRate,
+                avgWageGross,
+                regularsCount,
+                payoutManualRate,
+                cafeTrustScore,
                 recentReviews,
                 openShifts,
                 ownerView

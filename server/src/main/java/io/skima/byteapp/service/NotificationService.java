@@ -46,6 +46,7 @@ public class NotificationService {
         LocalDateTime now = LocalDateTime.now();
         LocalDateTime weekAgo = now.minusDays(7);
         LocalDateTime dayAgo = now.minusDays(1);
+        LocalDateTime threeDays = now.minusDays(3);
 
         List<Shift> myShifts = shiftRepository.findAllByOwnerId(owner.getId());
 
@@ -69,11 +70,11 @@ public class NotificationService {
             }
         }
 
-        // 2) 매칭 확정 (최근 7일)
+        // 2) 매칭 확정 (최근 24시간 — 정보성, 짧은 retention)
         for (Shift s : myShifts) {
             matchRepository.findActiveByShiftId(s.getId()).ifPresent(m -> {
                 if (m.getStatus() == MatchStatus.MATCHED
-                        && m.getMatchedAt() != null && m.getMatchedAt().isAfter(weekAgo)) {
+                        && m.getMatchedAt() != null && m.getMatchedAt().isAfter(dayAgo)) {
                     raws.add(new Raw(
                             "NEW_MATCH",
                             m.getWorker().getName() + " 님과 매칭 확정",
@@ -139,11 +140,11 @@ public class NotificationService {
                     backedUp ? "info" : "warn"));
         }
 
-        // 4) 워커가 매장에 남긴 평가 (최근 7일)
+        // 4) 워커가 매장에 남긴 평가 (최근 3일 — 정보성, 짧은 retention)
         List<Rating> received = ratingRepository.findAllByOwnerIdAndDirection(
                 owner.getId(), RatingDirection.WORKER_TO_OWNER);
         for (Rating r : received) {
-            if (r.getCreatedAt() == null || r.getCreatedAt().isBefore(weekAgo)) continue;
+            if (r.getCreatedAt() == null || r.getCreatedAt().isBefore(threeDays)) continue;
             Long cafeId = r.getMatch().getShift().getCafe().getId();
             raws.add(new Raw(
                     "WORKER_RATING",
@@ -155,10 +156,11 @@ public class NotificationService {
                     r.getScore() >= 4 ? "success" : "warn"));
         }
 
-        // unread 판정 + 정렬
+        // unread 판정 + 정렬 + 최대 30건 제한 (점주 알림 과다 방지)
         LocalDateTime seenAt = owner.getLastNotificationSeenAt();
         return raws.stream()
                 .sorted(Comparator.comparing(Raw::at).reversed())
+                .limit(30)
                 .map(r -> {
                     boolean unread = seenAt == null || r.at().isAfter(seenAt);
                     return new NotificationItem(

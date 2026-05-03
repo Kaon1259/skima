@@ -2,8 +2,11 @@ import { useCallback, useState } from 'react';
 import { Alert, FlatList, Platform, Pressable, RefreshControl, Text, View } from 'react-native';
 import { router } from 'expo-router';
 import { ChatSheet } from '@/components/ChatSheet';
+import { DisputeModal } from '@/components/DisputeModal';
+import { EmptyState } from '@/components/EmptyState';
 import { Icon } from '@/components/Icon';
 import { RatingModal, blurFocusedForModal } from '@/components/RatingModal';
+import { SkeletonList } from '@/components/Skeleton';
 
 import { api } from '@/lib/api';
 import { getCurrentCoords } from '@/lib/geolocation';
@@ -53,9 +56,11 @@ function TimelineDot({
 export default function WorkerMatchesScreen() {
   const [matches, setMatches] = useState<ShiftMatch[]>([]);
   const [refreshing, setRefreshing] = useState(false);
+  const [initialLoaded, setInitialLoaded] = useState(false);
   const [busyId, setBusyId] = useState<number | null>(null);
-  const [ratingTarget, setRatingTarget] = useState<{ matchId: number; cafeName: string } | null>(null);
+  const [ratingTarget, setRatingTarget] = useState<{ matchId: number; cafeName: string; cafeId: number | null } | null>(null);
   const [chatTarget, setChatTarget] = useState<{ matchId: number; cafeName: string } | null>(null);
+  const [disputeTarget, setDisputeTarget] = useState<{ matchId: number; cafeName: string } | null>(null);
 
   const load = useCallback(async () => {
     setRefreshing(true);
@@ -66,6 +71,7 @@ export default function WorkerMatchesScreen() {
       notify((e as Error).message);
     } finally {
       setRefreshing(false);
+      setInitialLoaded(true);
     }
   }, []);
 
@@ -109,7 +115,11 @@ export default function WorkerMatchesScreen() {
 
   function openRating(m: ShiftMatch) {
     blurFocusedForModal();
-    setRatingTarget({ matchId: m.id, cafeName: m.cafeName ?? `시프트 #${m.shiftId}` });
+    setRatingTarget({
+      matchId: m.id,
+      cafeName: m.cafeName ?? `시프트 #${m.shiftId}`,
+      cafeId: m.cafeId ?? null,
+    });
   }
   function openChat(m: ShiftMatch) {
     blurFocusedForModal();
@@ -137,10 +147,19 @@ export default function WorkerMatchesScreen() {
           </View>
         }
         ListEmptyComponent={
-          <View style={{ paddingTop: 60, alignItems: 'center' }}>
-            <Text style={{ fontSize: 36, marginBottom: 8 }}>📅</Text>
-            <Text style={styles.bodyMuted}>아직 매칭된 시프트가 없어요</Text>
-          </View>
+          !initialLoaded ? (
+            <SkeletonList count={3} />
+          ) : (
+            <EmptyState
+              emoji="📅"
+              title="아직 매칭된 시프트가 없어요"
+              subtitle="시프트 검색에서 1탭으로 지원해보세요. 점주가 확정하면 여기에 표시됩니다"
+              actions={[{
+                label: '시프트 검색',
+                onPress: () => router.push('/worker/shifts' as never),
+              }]}
+            />
+          )
         }
         renderItem={({ item }) => {
           const v = statusVisual(item.status);
@@ -302,6 +321,27 @@ export default function WorkerMatchesScreen() {
                   </Pressable>
                 )
               ) : null}
+
+              {/* 이의 제기 — 매칭 종료(CHECKED_OUT/NO_SHOW) 시 24h 이내 가능 */}
+              {(item.status === 'CHECKED_OUT' || item.status === 'NO_SHOW') ? (
+                <Pressable
+                  onPress={() => setDisputeTarget({ matchId: item.id, cafeName: item.cafeName ?? '매장' })}
+                  style={({ pressed }) => [
+                    {
+                      marginTop: 8, paddingVertical: 8,
+                      flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
+                      borderRadius: radius.md, borderWidth: 1, borderColor: colors.border,
+                      backgroundColor: colors.surface,
+                    },
+                    pressed && { opacity: 0.7 },
+                  ]}
+                >
+                  <Text style={{ fontSize: 12 }}>⚠️</Text>
+                  <Text style={{ fontSize: 11, fontWeight: '700', color: colors.textMuted }}>
+                    이의 제기 (24h 내)
+                  </Text>
+                </Pressable>
+              ) : null}
             </View>
           );
         }}
@@ -310,6 +350,7 @@ export default function WorkerMatchesScreen() {
         visible={ratingTarget != null}
         matchId={ratingTarget?.matchId ?? null}
         targetName={ratingTarget?.cafeName ?? ''}
+        cafeId={ratingTarget?.cafeId ?? null}
         mode="worker-rates-owner"
         onClose={() => setRatingTarget(null)}
         onSubmitted={() => load()}
@@ -319,6 +360,14 @@ export default function WorkerMatchesScreen() {
         matchId={chatTarget?.matchId ?? null}
         title={chatTarget ? `${chatTarget.cafeName} 채팅` : undefined}
         onClose={() => setChatTarget(null)}
+      />
+      <DisputeModal
+        visible={disputeTarget != null}
+        matchId={disputeTarget?.matchId ?? null}
+        role="WORKER"
+        cafeName={disputeTarget?.cafeName}
+        onClose={() => setDisputeTarget(null)}
+        onSubmitted={() => { setDisputeTarget(null); load(); }}
       />
     </>
   );

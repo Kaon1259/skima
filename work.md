@@ -310,6 +310,13 @@
 
 ---
 
+## 2026-05-02 — GitHub push (라운드 1~7 일괄 저장)
+- 커밋 `13ec1a1` "Skima Byte 2026-05-02 라운드 1~7 일괄 저장"
+- 59 파일 변경 (12개 신규, 47개 수정)
+- 시크릿 노출 없음 — `application.yml` 디폴트값 비어있음 그대로 유지
+
+---
+
 ## 2026-05-02 (7라운드) — 인프라 3종: 카카오 native + 푸시 + GPS
 
 ### 사용자 결정
@@ -533,3 +540,366 @@
 - 카카오 콘솔에 운영 redirect URI 추가 등록
 
 **카카오 redirect URI 우회 옵션** — 콜백 페이지는 Expo Web 이 받고 코드 교환만 Railway 로 POST 하는 현재 흐름 유지하면 redirect URI 변경 없이 백엔드 URL만 바꿔도 됨
+
+---
+
+## 2026-05-03 — 8라운드: 잔불 정리 + 프로필 정보 강화 + 자동화
+
+### 사용자 결정
+- 추천 순서대로 일괄 진행, 질문 없이 끝까지
+- 모바일에서 테스트 — 백엔드/Expo 백그라운드 실행
+- 카카오 native deep-link 콘솔 등록은 다음 라운드로 미룸 (Kakao 콘솔이 custom scheme `skima://` 거부 — http(s) 브리지 페이지 필요)
+- **사용자 피드백 (작업 도중)**: "매장 정보·평판이 부족, 워커 정보도 부족" → 라운드 중간에 새 작업으로 슬롯 추가
+
+### 진행 상황 — 완료 ✅
+
+**A6 — ⭐ 매장 pin (점주 메인 매장 가로 스크롤)**
+- `lib/pinnedCafes.ts` 신설 — `usePinnedCafes` hook (storage.ts 위에 + Set 백킹)
+- `owner/shifts.tsx` `CafeStatsRow` — pin한 매장 우선, ⭐/☆ 토글 버튼, 헤더 라벨 분기 ("⭐ 우선 · 활동 많은 순")
+
+**매장 프로필 정보 강화 (사용자 피드백)**
+- 백엔드 `Cafe` 엔티티 + 필드 4개: `openHours` / `seatCount` / `phone` / `description` (+ `updateProfile` 메서드)
+- `CafeCreateRequest` / `CafeResponse` 동기화
+- `OwnerController` createCafe / updateCafe 새 필드 처리
+- `CafeDetailResponse` 확장: 매장 정보 4개 + 평판 시그널 3개 (`rehireRate`, `avgWageGross`, `regularsCount`, `totalMatches`)
+- `CafeDetailService` — 재고용률(2회+ 워커 비율), 최근 30일 평균 일급, 단골 워커 수 계산
+- 클라 `Cafe` / `CafeDetail` 타입 동기화
+- `owner/cafes.tsx` 등록·편집 모달에 새 필드 입력 영역 (영업시간 / 좌석수 / 매장 전화 / 매장 소개 멀티라인)
+- `cafe/[id].tsx` — `AboutCard` (매장 정보) 신설 + `SignalsCard` 2행 확장 (재고용률·단골 워커·평균 일급)
+
+**워커 프로필 정보 강화 (사용자 피드백)**
+- 백엔드 `User` 엔티티 + 필드 3개: `bio` / `experienceYears` / `availableHours` (+ `updateWorkerBio` 메서드)
+- `WorkerProfileUpdateRequest` 확장 (+ `updateBio` 토글 — bio/availableHours null=clear 의미 명확화)
+- `MeController` — `/api/me` 응답 확장, `/api/me/worker-profile` updateBio=true 면 bio도 갱신
+- `WorkerProfileResponse` 확장 — 자기신고(level/roles/certs/bio/exp/availableHours) + 평판 시그널 5개 (`rehireRate`, `favoriteCafeCount`, `onTimeCount`, `lateCount`, `avgWorkMinutes`)
+- `WorkerProfileService` — 매장별 재고용률, 정시·지각 카운트 (시작-5분 이내 정시), 평균 실 근무 분, 즐겨찾기 매장 수 계산
+- 클라 `MyProfile` / `WorkerProfile` 타입 동기화
+- `worker/profile.tsx` 자기 편집 — 자기소개 / 경력년수 / 가능시간대 카드 추가
+- `u/[id].tsx` 외부 보기 — 헤더에 등급·경력 뱃지, 자기소개+직무+자격 카드, 평판 시그널 카드(정시·평균근무·단골매장·재방문)
+
+**A5 — 노쇼 결과 모달**
+- `components/NoShowResultModal.tsx` 신설 — 결과 3종 분기:
+  - 백업 매칭 성공 → ✅ 백업 워커 카드 + 자동 알림 안내
+  - 재모집 → 🔄 단골 N명 푸시 + "워커풀 열기" 빠른 액션
+  - 일반 → 📋 노쇼 등록 완료
+- `owner/shift/[id].tsx` reportNoShow → 토스트 분기 제거 → 모달 호출
+- toast import 정리
+
+**A2 — 중복 시프트 검증 + 단골 우선 토글**
+- 백엔드 `ShiftRepository.findOverlapping` — 같은 매장에서 [start, end] 와 겹치는 시프트 (CANCELED 제외)
+- `OwnerController.checkOverlap` — `GET /api/owner/shifts/check-overlap?cafeId=X&startAt=Y&endAt=Z`
+- `Shift` 엔티티 + `favoritesOnlyUntil` 필드 + builder 인자
+- `ShiftCreateRequest` + `favoritesOnlyMinutes` 필드 (null/0 = 모두 공개)
+- `ShiftService.create` — favoritesOnlyMinutes>0 이면 favoritesOnlyUntil=now+min
+- `WorkerController.openShifts` — favoritesOnlyUntil>now 인 시프트는 즐겨찾기 한 워커에게만 노출
+- `ShiftResponse` favoritesOnlyUntil 노출 / 클라 Shift 타입 동기화
+- `owner/new-shift.tsx`:
+  - 디바운스 350ms 중복 검증 → 인라인 빨간 경고 카드 (최대 3건 노출)
+  - submit 시 한 번 더 confirm 다이얼로그
+  - 단골 우선 노출 토글 (체크박스) + 분 칩 4종 (10/30/60/120)
+  - 등록 성공 토스트 분기 (단골 우선 노출 안내)
+
+**W3 — 워커 월별 수입 미니 차트**
+- `worker/stats.tsx` `MonthlyIncomeChart` 컴포넌트 신설
+- `/api/worker/payouts` 추가 fetch
+- 최근 3개월 슬롯 / COMPLETED payout 만 집계 / 막대 그래프 + 이번달 강조 색
+- 데이터 0이면 자체 숨김
+
+**W4 — 워커 계약서/영수증 모음 화면**
+- 신규 라우트 `app/worker/documents.tsx` (href:null 등록)
+- `/api/worker/matches` fetch → 월별 그룹화 + 검색 (매장명/날짜)
+- 각 카드에 "근로계약서"·"원천징수영수증" 빠른 액션 (기존 `/contract/{id}`·`/withholding/{id}` 라우트 재사용)
+- `worker/home.tsx` 빠른 진입에 "📄 내 문서" 버튼 추가
+
+**X2 — 빈 상태 + 스켈레톤 로딩 일괄**
+- `components/EmptyState.tsx` 신설 — emoji+title+subtitle+actions(primary/secondary)
+- `components/Skeleton.tsx` 신설 — `Skeleton` (애니메이션 박스) + `SkeletonCard` + `SkeletonList`
+- 적용:
+  - `worker/matches.tsx` → 로딩 시 스켈레톤 / 빈 상태 시 EmptyState ("시프트 검색" CTA)
+  - `owner/shifts.tsx` → 로딩 시 스켈레톤 / 빈 상태 시 EmptyState ("첫 시프트 등록하기" CTA)
+  - `cafe/[id].tsx` → 로딩 시 스켈레톤 카드 3개
+
+**X3 — 에러 재시도 토스트**
+- `lib/toast.tsx` `pushToastGlobal` 신설 — Provider 외부에서 imperative push (singleton 등록)
+- ToastProvider mount 시 `_globalPush` 등록, unmount 시 해제
+- `lib/api.ts` 리팩터:
+  - `NetworkError` 클래스 신설 (ApiError 와 분리)
+  - `retries` 파라미터 (기본 1) — 네트워크 실패 시 600ms 백오프 후 재시도
+  - 재시도 다 실패하면 글로벌 토스트 (3초 디바운스로 스팸 방지) + throw
+  - `silentNetwork: true` 로 토스트 끌 수 있음
+
+**A3 — 시프트 템플릿 + 자동 반복 등록**
+- 백엔드 신규 도메인 `ShiftTemplate` (owner+cafe+name+daysOfWeek+startHour/Minute+durationHours+wage+headcount+description+jobRole+minSkill+requirements+active)
+- `ShiftTemplateRepository`
+- `ShiftTemplateService`:
+  - CRUD (create/list/setActive/delete)
+  - `materialize(id, days)` — 단일 템플릿 즉시 적용
+  - `generateForActiveTemplates()` — 모든 active 템플릿 다음 14일 자동 생성
+  - 같은 매장·시작·종료 정확히 일치 시 중복 생성 스킵
+  - 시작 시각이 이미 지났으면 스킵
+- `ShiftTemplateScheduler` `@Scheduled(cron = "0 5 0 * * *")` — 매일 자정 5분
+- `OwnerController` 5개 endpoint (GET/POST/active/DELETE/materialize)
+- 클라 `app/owner/shift-templates.tsx` 신규 — 리스트 + 활성 토글 + 즉시 적용 + 삭제 + 신규 모달 (요일·시간·근무·시급·인원·직무·등급·자격 풀스펙)
+- `owner/_layout.tsx` 라우트 등록 (href: null)
+- `owner/shifts.tsx` 빠른 진입 영역에 "🗓️ 템플릿" 버튼 추가
+
+**A4 — 단골 워커 그룹별 분류**
+- `owner/worker-pool.tsx`:
+  - 자동 분류 함수 `classifyTier`: VIP (5+ 매칭 + ★4.5+) / REGULAR (2~4) / NEW (0~1)
+  - `TIER_META` 색상 매핑 (VIP=골드, REGULAR=오렌지, NEW=블루)
+  - 헤더 통계 → 총/VIP/단골/신규/노쇼 5분할
+  - 그룹 필터 chips (전체/VIP/단골/신규)
+  - WorkerCard 헤더에 자동 그룹 뱃지 + 기존 점주 단골 뱃지 라벨 분리
+
+### 검증
+- 백엔드 `mvnw compile` ✅ (신규 100 source files)
+- 클라 `tsc --noEmit` 0 errors
+- 백엔드 재시작 — 모바일 테스트 가능
+
+### 사용자 액션 필요
+- 카카오 콘솔 native redirect URI: 작업 보류 (브리지 페이지 필요 — A 옵션 미진행)
+- 시드 매장은 새 컬럼이 null — 등록·편집해서 채우면 매장 상세에 노출됨
+- 단골 우선 토글은 즐겨찾기 워커가 있어야 의미 있음 (그 전에는 모두 차단됨)
+
+### 다음 라운드 후보
+- A1 매출/세무 강화 (statement 토글·추세 차트·PDF)
+- A7 매장 사진 업로드 (스토리지 의존)
+- W5 워커 프로필 사진 업로드 (스토리지 의존)
+- S4 워커 등급제 (Verified Barista) — 자동 등급 부여
+- S3 분쟁 이의제기 흐름
+- 카카오 native deep-link 브리지 페이지 (GitHub Pages 1분)
+
+---
+
+## 2026-05-03 — 9~K 라운드 (큰 작업 누적)
+
+### 추가/변경 핵심
+- `application.yml`: AWS S3 (`cloud.aws.s3`) + multipart + 시드 5점주 + 보건증/등급/Trust Score 등
+- 사용자 자격증명 노출됨 (AKIAW7WYAVZMXZUV6MFB) — **운영 가기 전 무효화 필요** ⚠️
+- DB 신규 컬럼 (모두 ddl-auto: create로 자동 적용):
+  - User: bio/experienceYears/availableHours, prefMin/Max*, profileImage(MEDIUMTEXT), healthCert*, trustScore (계산값)
+  - Cafe: openHours/seatCount/phone/description/imageUrl(MEDIUMTEXT)
+  - Shift: favoritesOnlyUntil
+  - 신규 도메인 6개: ShiftTemplate, OwnerFavoriteWorker, WorkerFavoriteCafe, WorkerBlockedCafe, Dispute, ShiftInvitation
+
+### 9라운드 — A/B 점주·워커 동선 구조 개편
+**점주 P0 — 매장 등록 자동 흐름**
+- OnboardingSteps 1단계 → `/owner/cafes?autoCreate=1` → 모달 자동 오픈
+- 등록 성공 시 `router.replace('/owner/shifts')` 자동 복귀
+
+**점주 P1 — 첫 시프트 등록 후 안내**
+- new-shift submit 시 첫 시프트면 `/owner/shift/[id]?firstTime=1` 진입 + 🎉 안내 배너
+
+**워커 시프트 첫 탭 흡수**
+- 모든 redirect (login/index/auth) → `/worker/shifts`
+- `WorkerHomeWidgets` 컴포넌트로 시프트 화면 상단에 위젯 통합
+- 4탭으로 (시프트/매칭/정산/마이)
+
+**워커 마이 탭 통합**
+- 신규 `worker/me.tsx` — 프로필 편집 진입 + 통계 + 평가 + 월별 차트
+- 통계+프로필+문서 → 마이로 흡수
+
+**워커 빠른 필터 칩**
+- 시프트 탭 헤더에 시간대(오전/오후/저녁/심야), 요일(오늘/이번주/주말), 시급(12k/15k+), 단골만, 능력매칭만 칩
+- AsyncStorage 영구 저장
+
+**워커 영구 필터 (마이 탭 선호 조건)**
+- `lib/workerPrefs.ts` — 최소 시급/매장 평점/노쇼율 임계치/거리
+- 시프트 화면에서 항상 적용 (단골 매장은 면제)
+
+**owner4·owner5 시드** — 신규 점주 (매장 0) 테스트 계정
+
+### 10라운드 — C/D 라운드 (알림 통합 / 거리 / 분쟁 / 온보딩 / 사진)
+**C 알림+필터 백엔드 통합**
+- User에 prefMinWage/prefMinCafeRating/prefMaxCafeNoShowRate
+- prefsAcceptShift() 메서드 — 단골 면제 + 그 외 모두 통과 체크
+- ShiftService.create 단골 푸시 시 prefs 적용
+
+**C 단골 매장 황금 강조**
+- WorkerShiftView.isFavoriteCafe enrich
+- 워커 시프트 카드: 황금 borderLeft + ⭐ 단골 뱃지
+
+**D1 워커 등급제 (Verified Barista)**
+- WorkerStatsResponse.WorkerTier: NEW/REGULAR/VERIFIED/ELITE
+- 자동 분류 — 완료 횟수 + 평점 + 노쇼 + 재고용률
+- WorkerTierBadge 컴포넌트 4곳 노출
+
+**D2 거리 기반 필터**
+- WorkerShiftView.cafeLatitude/Longitude
+- lib/geolocation.distanceKm (Haversine)
+- 거리 칩 5/10/30km + 가까운순 정렬 + 카드 거리 표시
+- 단골 매장 거리 면제
+
+**D3 분쟁 이의제기**
+- Dispute 도메인 + DisputeReason/Status/Verdict
+- 자동 판정 휴리스틱: NO_SHOW_DISPUTE는 체크인 기록, LATE_CHECKIN/EARLY_CHECKOUT은 ±10분
+- 클라 DisputeModal — worker/matches CHECKED_OUT/NO_SHOW 카드에 "⚠️ 이의 제기" 버튼
+
+**D4 워커 온보딩 튜토리얼**
+- WorkerOnboardingTutorial 4-step 모달 (환영→프로필→선호 조건→단골)
+- AsyncStorage 플래그로 첫 진입 시만
+
+**D5 프로필 사진 업로드 (S3 전환)**
+- pom.xml AWS SDK v2 (s3:2.25.16)
+- S3Service (springdeveloper 참고)
+- application.yml cloud.aws.s3.bucket/region (env vars)
+- POST/DELETE /api/me/profile-image (multipart) + cafe/{id}/image
+- expo-image-picker ~17.0.11 설치
+- lib/imageUpload.ts 헬퍼 (web/native 분기)
+- 사용자가 AWS 셋업 (skimabyte-profile 버킷 + IAM + bucket policy public read)
+
+### 11라운드 — E (사진 노출 4곳 + 매장 사진 UI)
+- WorkerProfileResponse.profileImage / ApplicationResponse.workerProfileImage
+- 신규 `Avatar` 컴포넌트 (사진/이니셜 분기, 4 사이즈)
+- 노출: worker/me 헤더 / u/[id] 헤더 / shift/[id] 지원자 / worker-pool 카드
+- owner/cafes 카드에 매장 사진 + 사진 추가/삭제 버튼
+- cafe/[id] 헤더에 매장 사진 (180px)
+
+### 12라운드 — G (Trust Score + 평가 history + 차단)
+**G5 워커 Trust Score**
+- WorkerStatsResponse.trustScore (0~100, null=신규<3건)
+- 공식: 별점/5*40 + 재고용*30 + (1-노쇼)*20 + min(완료/10,1)*10
+- TrustScoreBadge 컴포넌트 (색상 분기)
+- 노출: u/[id] 헤더, 지원자 카드, 워커풀 카드
+
+**G6 매장 Trust Score**
+- CafeDetailResponse.trustScore + payoutManualRate
+- 공식: 별점/5*35 + 재고용*25 + (1-노쇼)*15 + 정산빠른승인*15 + min(매칭/20,1)*10
+- 점주 명시 승인 비율을 "정산 신뢰도"로 정량화
+- cafe/[id] 헤더 매장명 옆 노출
+
+**G1 워커가 매장에 준 평가 history**
+- worker/me에 "내가 매장에 남긴 평가" 카드 (받은 평가 위)
+- /api/worker/me/ratings/given 재사용
+
+**G2 워커 차단 매장**
+- WorkerBlockedCafe 도메인 + 엔드포인트
+- WorkerController.openShifts에서 차단 매장 자동 제외
+- cafe/[id]에 단골/차단 토글 (양립 불가)
+
+**G3 평가 모달에 차단 동시 처리**
+- ★≤2 또는 willRehire=false 일 때 "🚫 차단" 체크박스 자동 노출
+- 평가+차단 한 흐름
+
+### 13라운드 — H (보건증 인증)
+- HealthCertStatus enum: NOT_UPLOADED/PENDING/VERIFIED/REJECTED/EXPIRED
+- User 보건증 6개 필드 (image/status/uploadedAt/verifiedAt/expiresAt/rejectReason)
+- 1년 만료 + cron 자동 EXPIRED
+- POST /api/me/health-cert (multipart S3) — 운영은 PENDING 유지 (admin 검토)
+- ApplicationService.apply 보건증 필수 체크 — requirements에 HEALTH_CERT 있으면 VERIFIED만 지원 가능
+- 클라: HealthCertBadge 컴포넌트, worker/profile 업로드 카드, u/[id]·지원자 카드 status 뱃지
+- 점주는 status만 봄 (이미지는 admin 전용 — 개인정보)
+
+### 14라운드 — I (자동 이동 / 알림 그룹화 / 매장 trust score)
+**I1 워커 매칭 자동 이동**
+- NotificationBell가 NEW_MATCH 새 알림 감지 → 800ms 후 router.push
+- 워커만, 입력 포커스 중이면 차단
+
+**I2 점주 알림 정리**
+- NEW_MATCH retention 7일 → 1일
+- WORKER_RATING retention 7일 → 3일
+- hard limit 30건
+
+**I3 매장 trust score 시프트 카드**
+- WorkerShiftView.cafeTrustScore enrich
+- 워커 시프트 카드: 작은 뱃지 (null이면 숨김)
+
+### 15라운드 — J (1탭 재고용 + admin 보건증)
+**J1 ShiftInvitation 도메인**
+- shift × worker × owner × message × status × expiresAt
+- InvitationStatus: PENDING/ACCEPTED/REJECTED/EXPIRED/CANCELED
+- ShiftInvitationService — create/accept/reject + @Scheduled 만료 처리
+- accept 시 ShiftMatch 자동 생성 + Shift MATCHED 전이 + 양측 푸시
+- POST /api/owner/shift-invitations + /api/worker/invitations + accept/reject
+
+**J2 점주 초대 UI**
+- worker-pool 카드에 "📨 시프트 직접 제안" 버튼
+- InviteModal — OPEN 시프트 픽 + 메시지 + 마감 (30/60/120/240분)
+
+**J3 워커 초대 응답**
+- 신규 `worker/invitations.tsx` — PENDING 초대 + 1탭 수락/거절
+- 수락 시 `/worker/matches?focus=...` 자동 진입
+- WorkerHomeWidgets 상단 큰 파란 배너
+
+**J4/J5 admin 보건증 리뷰**
+- 자동 VERIFY 끄고 PENDING 유지
+- /api/admin/health-certs 리스트 + verify/reject 엔드포인트
+- HealthCertReviewItem DTO
+- 신규 `app/admin/health-certs.tsx` — 보건증 이미지 + 인증/거부 인라인
+- admin/kpi 화면에서 진입 버튼
+
+### 16라운드 — K (점주 정산 탭)
+- PayoutRepository.findAllByOwnerId
+- PayoutResponse.workerName 추가
+- GET /api/owner/payouts
+- 신규 `app/owner/payouts.tsx`:
+  - 헤더 KPI: 이번달 총 지출 + 승인 대기 건수 + 30분 입금 SLA 충족률
+  - 상태 필터 칩 (전체/승인 대기/진행중/완료)
+  - 카드: 임금/수수료/순수령액 분해 + 자동/명시 승인 + elapsed
+  - REQUESTED 상태에 황금 borderLeft + "정산 승인 + 평가" 큰 버튼
+  - 우상단 "📄 월간 명세" 빠른 진입
+- 탭바: 시프트/등록/매장/정산 (4개), 월간명세는 hidden
+- ⚠️ **버그 수정**: RatingModal.notify가 native에서 silent였음 → Alert.alert 추가. 이전엔 모바일에서 에러 시 화면 변화 없어서 "안 됨" 으로 보였을 가능성 큼
+
+### 진단된 잠재 이슈 (점주 정산 승인 + 평가)
+- RatingModal native silent notify (수정 완료)
+- PushNotificationService @Async 후 ResultSet closed 에러 (응답엔 영향 없음, 푸시만 실패)
+- gross=0 — 워커가 체크인 직후 즉시 체크아웃하면 분 단위로 0 (실 운영 시 문제 없음)
+
+### 검증
+- 백엔드 mvnw compile ✅ (122 source files, J 라운드 기준)
+- 클라 tsc --noEmit 0 errors
+- 백엔드 K 라운드 컴파일 통과 (122 + 알파)
+
+### 외부 의존 (미해결)
+- AWS S3 IAM 키 무효화 (채팅에 노출됨)
+- 카카오 native deep-link 콘솔 등록 — http(s) 전용이라 브리지 페이지 필요
+- Toss/오픈뱅킹 PG (현재 mock COMPLETED)
+- EAS 빌드 셋업 (Expo Go에선 푸시 토큰 unavailable)
+- application-prod.yml + Flyway (운영 마이그레이션)
+
+---
+
+## 📋 남은 작업 항목 (우선순위 순)
+
+### P0 — 검증·테스트 (인프라 완성)
+- [ ] **점주 정산 승인 + 평가 동작 검증** — Alert 노출되어 진짜 에러 메시지 확인
+- [ ] AWS S3 IAM 키 폐기 + 새 키 발급 (보안)
+- [ ] 시드 데이터 다양화 — 시프트·매칭·체크인/아웃·정산·평가·분쟁 다양한 케이스 (skima.seed.create-shifts-and-apps=true 활용)
+- [ ] 모바일 실 단말 검증 (현재 Expo Go LAN)
+
+### P1 — 사용자 가치 큰 미구현
+- [ ] **카카오 Local API 매장 검색** — 옵션 A (검색+자동채움) 1~2시간
+- [ ] 카카오 지도 시각화 — 옵션 B (3~5시간)
+- [ ] **점주 측 분쟁 신고 UI** — 현재 워커만 가능 (owner/shift/[id] 카드에 "이의 제기" 버튼)
+- [ ] **분쟁 자동 판정 cron** — DisputeService.autoResolve를 매시간 실행 (현재 admin 수동 호출만)
+- [ ] **매장 사진을 워커 시프트 카드에 노출** — 현재 cafe/[id] 진입해야 보임
+- [ ] **시프트 추천 알고리즘** — 거리+시급+평점+이력 종합 점수로 정렬
+
+### P2 — 운영 인프라
+- [ ] EAS 빌드 셋업 (Expo Go 졸업)
+- [ ] Apple Developer + Google Play Console 계정
+- [ ] 카카오 콘솔 native redirect URI (브리지 페이지 호스팅 또는 SDK 전환)
+- [ ] Toss/오픈뱅킹 실 연동 (PG 키 + 송금 API)
+- [ ] application-prod.yml + Flyway
+- [ ] Railway 배포 (서버) + 도메인
+- [ ] CDN 또는 R2 마이그레이션 (S3 비용)
+
+### P3 — 폴리시·완성도
+- [ ] 매출/세무 화면 강화 (statement 토글·추세 차트·PDF)
+- [ ] 시프트 템플릿 추가 기능 (1탭 빠른 적용 vs 자동 cron)
+- [ ] 스켈레톤 로딩 화면 더 많은 곳에 적용
+- [ ] 추천 코드/친구 초대 (K-factor)
+- [ ] KakaoTalk 시프트 공유
+- [ ] 알바 이력서 PDF 자동 생성
+
+### P4 — 알려진 버그·잔불
+- [ ] PushNotificationService @Async ResultSet closed 에러 (lazy load 후 transaction 종료)
+- [ ] gross=0 정산 발생 시 안내 (체크인 직후 체크아웃 케이스 — 운영 영향 적음)
+- [ ] 카카오 로그인 콘솔 등록 미완 (saju 키 공유 dev only)
+
+### 🔒 보안 액션 (즉시)
+- [ ] **AWS IAM 사용자 `skimabyte-profile-s3-user` 액세스 키 비활성화 + 삭제**
+  - AKIAW7WYAVZMXZUV6MFB 키가 채팅에 노출됨
+  - AWS 콘솔 → IAM → 사용자 → 보안 자격증명 → 삭제 후 새 키 발급
+  - PowerShell `$env:AWS_ACCESS_KEY_ID` 로 다시 설정 후 백엔드 재시작

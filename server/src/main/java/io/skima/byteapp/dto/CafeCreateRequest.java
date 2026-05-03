@@ -11,6 +11,10 @@ public record CafeCreateRequest(
         @NotNull CafeType cafeType,
         String brandKey,
         Double latitude,
-        Double longitude
+        Double longitude,
+        @Size(max = 128) String openHours,
+        Integer seatCount,
+        @Size(max = 32) String phone,
+        @Size(max = 1024) String description
 ) {
 }

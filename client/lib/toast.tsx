@@ -24,6 +24,13 @@ type Ctx = {
 
 const ToastContext = createContext<Ctx | null>(null);
 
+// 글로벌 imperative push — Provider 외부 (api wrapper 등) 에서 토스트 띄울 때 사용
+let _globalPush: ((t: Omit<Toast, 'id'>) => void) | null = null;
+export function pushToastGlobal(t: Omit<Toast, 'id'>) {
+  if (_globalPush) _globalPush(t);
+  else if (__DEV__) console.warn('pushToastGlobal: ToastProvider 가 아직 마운트되지 않음');
+}
+
 export function useToast(): Ctx {
   const v = useContext(ToastContext);
   if (!v) {
@@ -48,6 +55,14 @@ export function ToastProvider({ children }: { children: ReactNode }) {
       setToasts((prev) => prev.filter((x) => x.id !== id));
     }, item.ttl);
   }, []);
+
+  // 글로벌 push 등록 — api wrapper 등 컴포넌트 외부에서 호출 가능
+  useEffect(() => {
+    _globalPush = push;
+    return () => {
+      if (_globalPush === push) _globalPush = null;
+    };
+  }, [push]);
 
   return (
     <ToastContext.Provider value={{ push }}>

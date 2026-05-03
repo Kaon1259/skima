@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Alert, Platform, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
-import { router } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import { Icon } from '@/components/Icon';
 
 import { api } from '@/lib/api';
@@ -43,6 +43,10 @@ export default function NewShiftScreen() {
       return next;
     });
   const [busy, setBusy] = useState(false);
+  const [existingShiftCount, setExistingShiftCount] = useState<number | null>(null);
+  const [favoritesOnly, setFavoritesOnly] = useState(false);
+  const [favoritesOnlyMinutes, setFavoritesOnlyMinutes] = useState(30);
+  const [overlap, setOverlap] = useState<{ count: number; overlaps: { id: number; startAt: string; endAt: string; status: string }[] } | null>(null);
   const [bulk, setBulk] = useState(false);
   const [bulkDays, setBulkDays] = useState('7');
   const ALL_DOWS = ['MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY', 'SUNDAY'] as const;
@@ -55,17 +59,26 @@ export default function NewShiftScreen() {
   const toggleDow = (d: Dow) =>
     setSelectedDows((prev) => prev.includes(d) ? prev.filter((x) => x !== d) : [...prev, d]);
 
-  useEffect(() => {
+  // 매장 목록 + 기존 시프트 카운트 — 화면 진입 시마다 새로고침 (탭 전환·온보딩 흐름 후 매장 등록 즉시 반영)
+  useFocusEffect(useCallback(() => {
     (async () => {
       try {
-        const data = await api<Cafe[]>('/api/owner/cafes');
+        const [data, shifts] = await Promise.all([
+          api<Cafe[]>('/api/owner/cafes'),
+          api<{ id: number }[]>('/api/owner/shifts').catch(() => [] as { id: number }[]),
+        ]);
         setCafes(data);
-        if (data.length > 0) setCafeId(data[0].id);
+        // 현재 선택된 cafeId 가 새 데이터에 없으면 첫 번째로 fallback
+        setCafeId((prev) => {
+          if (prev != null && data.some((c) => c.id === prev)) return prev;
+          return data.length > 0 ? data[0].id : null;
+        });
+        setExistingShiftCount(shifts.length);
       } catch (e) {
         notify((e as Error).message);
       }
     })();
-  }, []);
+  }, []));
 
   function notify(msg: string) {
     if (Platform.OS === 'web') window.alert(msg);
@@ -78,6 +91,26 @@ export default function NewShiftScreen() {
   const fee = Math.round(totalEst * 0.12);
 
   const endPreview = useMemo(() => addHours(startAt, dur), [startAt, dur]);
+
+  // 중복 시프트 검증 — 단건 등록일 때만, 디바운스
+  useEffect(() => {
+    if (bulk || !cafeId || !startAt || !dur) {
+      setOverlap(null);
+      return;
+    }
+    const handle = setTimeout(async () => {
+      try {
+        const url = `/api/owner/shifts/check-overlap?cafeId=${cafeId}`
+          + `&startAt=${encodeURIComponent(toServerDateTime(startAt))}`
+          + `&endAt=${encodeURIComponent(toServerDateTime(endPreview))}`;
+        const r = await api<{ hasOverlap: boolean; count: number; overlaps: { id: number; startAt: string; endAt: string; status: string }[] }>(url);
+        setOverlap(r.hasOverlap ? { count: r.count, overlaps: r.overlaps } : null);
+      } catch {
+        setOverlap(null);
+      }
+    }, 350);
+    return () => clearTimeout(handle);
+  }, [bulk, cafeId, startAt, dur, endPreview]);
 
   // 일괄 등록 시 실제 생성될 시프트 개수 — 시작일 DOW 기준으로 윈도우 walk
   const bulkShiftCount = useMemo(() => {
@@ -159,7 +192,23 @@ export default function NewShiftScreen() {
           ? `${created}일 일괄 등록 완료!`
           : `${created}건 일괄 등록 완료 (${days}일 윈도우 / ${selectedDows.length}개 요일)`);
       } else {
-        await api('/api/owner/shifts', {
+        // 중복 시프트 경고 — 사용자 한 번 더 확인
+        if (overlap && overlap.count > 0) {
+          const ok = Platform.OS === 'web'
+            ? window.confirm(`이 매장에 같은 시간대 시프트가 ${overlap.count}건 이미 있습니다. 그래도 등록할까요?`)
+            : await new Promise<boolean>((resolve) => {
+                Alert.alert(
+                  '중복 시프트 경고',
+                  `같은 매장·시간 시프트가 ${overlap.count}건 있습니다.\n그래도 등록할까요?`,
+                  [
+                    { text: '취소', style: 'cancel', onPress: () => resolve(false) },
+                    { text: '그대로 등록', onPress: () => resolve(true) },
+                  ],
+                );
+              });
+          if (!ok) return;
+        }
+        const created = await api<{ id: number }>('/api/owner/shifts', {
           method: 'POST',
           body: {
             cafeId,
@@ -171,23 +220,34 @@ export default function NewShiftScreen() {
             jobRole,
             minSkill,
             requirements: Array.from(requirements),
+            favoritesOnlyMinutes: favoritesOnly ? favoritesOnlyMinutes : null,
           },
         });
-        notify('시프트 등록 완료! 1시간 매칭 SLA 시작');
+        notify(favoritesOnly
+          ? `시프트 등록 완료! 단골 워커에게만 ${favoritesOnlyMinutes}분 우선 노출`
+          : '시프트 등록 완료! 1시간 매칭 SLA 시작');
+        // 단골 워커 알림 토스트
+        api<{ count: number }>(`/api/owner/cafes/${cafeId}/favoriting-count`)
+          .then((r) => {
+            if (r.count > 0) {
+              toast.push({
+                title: `⭐ 단골 워커 ${r.count}명에게 알림 발송`,
+                subtitle: '단골로 등록한 워커가 새 시프트를 즉시 확인할 수 있어요',
+                severity: 'success',
+                ttl: 6000,
+              });
+            }
+          })
+          .catch(() => {});
+        // 첫 시프트면 시프트 상세로 진입 + firstTime 배너
+        if (existingShiftCount === 0 && created?.id) {
+          router.replace(`/owner/shift/${created.id}?firstTime=1`);
+          return;
+        }
+        router.replace('/owner/shifts');
+        return;
       }
-      // 단골 워커에게 알림 발송 안내 — 토스트
-      api<{ count: number }>(`/api/owner/cafes/${cafeId}/favoriting-count`)
-        .then((r) => {
-          if (r.count > 0) {
-            toast.push({
-              title: `⭐ 단골 워커 ${r.count}명에게 알림 발송`,
-              subtitle: '단골로 등록한 워커가 새 시프트를 즉시 확인할 수 있어요',
-              severity: 'success',
-              ttl: 6000,
-            });
-          }
-        })
-        .catch(() => {});
+      // 일괄 등록은 그냥 시프트 목록으로
       router.replace('/owner/shifts');
     } catch (e) {
       notify((e as Error).message);
@@ -546,6 +606,83 @@ export default function NewShiftScreen() {
           </View>
         ) : null}
       </View>
+
+      {/* 단골 우선 노출 토글 — 단건 등록 시만 */}
+      {!bulk ? (
+        <View style={styles.card}>
+          <Pressable
+            onPress={() => setFavoritesOnly(!favoritesOnly)}
+            style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}
+          >
+            <View
+              style={{
+                width: 22,
+                height: 22,
+                borderRadius: 6,
+                borderWidth: 2,
+                borderColor: favoritesOnly ? colors.warn : colors.border,
+                backgroundColor: favoritesOnly ? colors.warn : 'transparent',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              {favoritesOnly ? <Text style={{ color: '#fff', fontWeight: '900', fontSize: 14 }}>✓</Text> : null}
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={{ fontSize: 14, fontWeight: '700', color: colors.text }}>
+                ⭐ 단골 워커에게 우선 노출
+              </Text>
+              <Text style={[styles.bodyMuted, { fontSize: 12, marginTop: 2 }]}>
+                즐겨찾기한 워커만 N분간 먼저 지원 가능 — 그 이후 전체 공개
+              </Text>
+            </View>
+          </Pressable>
+          {favoritesOnly ? (
+            <View style={{ flexDirection: 'row', gap: 6, marginTop: 12 }}>
+              {[10, 30, 60, 120].map((m) => {
+                const active = favoritesOnlyMinutes === m;
+                return (
+                  <Pressable
+                    key={m}
+                    onPress={() => setFavoritesOnlyMinutes(m)}
+                    style={[
+                      styles.chip,
+                      active && { backgroundColor: colors.warn, borderColor: colors.warn },
+                    ]}
+                  >
+                    <Text style={[styles.chipText, active && { color: '#fff' }]}>{m}분</Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          ) : null}
+        </View>
+      ) : null}
+
+      {/* 중복 시프트 경고 */}
+      {!bulk && overlap && overlap.count > 0 ? (
+        <View
+          style={[
+            styles.card,
+            { backgroundColor: colors.dangerSoft, borderWidth: 1.5, borderColor: colors.danger },
+          ]}
+        >
+          <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center', marginBottom: 6 }}>
+            <Text style={{ fontSize: 18 }}>⚠️</Text>
+            <Text style={{ fontSize: 13, fontWeight: '800', color: colors.danger, flex: 1 }}>
+              같은 매장·시간 시프트가 {overlap.count}건 있어요
+            </Text>
+          </View>
+          <Text style={{ fontSize: 11, color: colors.text, lineHeight: 16 }}>
+            {overlap.overlaps.slice(0, 3).map((o) => {
+              const s = o.startAt.replace('T', ' ').slice(5, 16);
+              const e = o.endAt.replace('T', ' ').slice(11, 16);
+              return `• ${s}~${e} (${o.status})`;
+            }).join('\n')}
+            {overlap.overlaps.length > 3 ? `\n• 외 ${overlap.overlaps.length - 3}건` : ''}
+          </Text>
+        </View>
+      ) : null}
 
       <View
         style={[

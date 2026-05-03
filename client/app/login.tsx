@@ -22,6 +22,7 @@ import { colors, radius, spacing, styles } from '@/lib/theme';
 const SEED_ACCOUNTS: { id: string; label: string; sub: string; tag: string }[] = [
   { id: 'worker1', label: '워커1', sub: '단기 알바 (4명 더)', tag: 'WORKER' },
   { id: 'owner1', label: '점주김씨', sub: '메가커피 강남역점', tag: 'OWNER' },
+  { id: 'owner4', label: '신규점주', sub: 'owner4·5 매장 0개', tag: 'OWNER' },
   { id: 'admin', label: '관리자', sub: 'KPI 대시보드', tag: 'ADMIN' },
 ];
 
@@ -48,7 +49,7 @@ export default function LoginScreen() {
       }
       const auth = await loginWithKakao(code);
       if (auth.role === 'OWNER') router.replace('/owner/shifts');
-      else if (auth.role === 'WORKER') router.replace('/worker/home');
+      else if (auth.role === 'WORKER') router.replace('/worker/shifts');
       else router.replace('/admin/kpi');
     } catch (e) {
       showError((e as Error).message);
@@ -68,7 +69,7 @@ export default function LoginScreen() {
     try {
       const auth = await login(usr, pwd);
       if (auth.role === 'OWNER') router.replace('/owner/shifts');
-      else if (auth.role === 'WORKER') router.replace('/worker/home');
+      else if (auth.role === 'WORKER') router.replace('/worker/shifts');
       else router.replace('/admin/kpi');
     } catch (e) {
       const msg =

@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <title>단바 아이콘 후보</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Pretendard', 'Apple SD Gothic Neo', sans-serif;
+      background: #f5f5f5;
+      padding: 40px;
+      margin: 0;
+    }
+    h1 {
+      font-size: 22px;
+      margin-bottom: 8px;
+    }
+    p.guide {
+      color: #555;
+      font-size: 14px;
+      margin-bottom: 32px;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 32px;
+      max-width: 1400px;
+    }
+    .card {
+      background: white;
+      border-radius: 16px;
+      padding: 24px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+    }
+    .card h2 {
+      font-size: 16px;
+      margin: 0 0 4px;
+    }
+    .card p {
+      font-size: 12px;
+      color: #888;
+      margin: 0 0 16px;
+    }
+    .icon-frame {
+      width: 256px;
+      height: 256px;
+      border-radius: 56px;  /* iOS-style rounded square */
+      overflow: hidden;
+      margin: 0 auto;
+    }
+    /* Variant A — Coffee Brown + Korean */
+    .var-a {
+      background: linear-gradient(135deg, #5B3A29 0%, #3D2418 100%);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      width: 100%;
+      height: 100%;
+      color: white;
+      font-weight: 900;
+    }
+    .var-a .text {
+      font-size: 96px;
+      letter-spacing: -4px;
+      line-height: 1;
+    }
+    .var-a .sub {
+      font-size: 16px;
+      opacity: 0.85;
+      margin-top: 8px;
+      letter-spacing: 4px;
+      font-weight: 700;
+    }
+    /* Variant B — Vibrant Orange + Bolt */
+    .var-b {
+      background: linear-gradient(135deg, #FB923C 0%, #EA580C 100%);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      width: 100%;
+      height: 100%;
+      color: white;
+      font-weight: 900;
+      position: relative;
+    }
+    .var-b .bolt {
+      position: absolute;
+      top: 32px;
+      right: 32px;
+      font-size: 32px;
+    }
+    .var-b .text {
+      font-size: 110px;
+      letter-spacing: -6px;
+      line-height: 1;
+    }
+    /* Variant C — Modern Dark + Mint */
+    .var-c {
+      background: #0F172A;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      width: 100%;
+      height: 100%;
+      color: #5EEAD4;
+      font-weight: 900;
+    }
+    .var-c .text {
+      font-size: 100px;
+      letter-spacing: -4px;
+      line-height: 1;
+    }
+    .var-c .sub {
+      font-size: 13px;
+      color: #94A3B8;
+      margin-top: 12px;
+      letter-spacing: 6px;
+      font-weight: 700;
+    }
+    /* Variant D — Friendly Coral + Round */
+    .var-d {
+      background: linear-gradient(135deg, #FF6B6B 0%, #EE5A6F 100%);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100%;
+      height: 100%;
+      color: white;
+      font-weight: 900;
+      position: relative;
+    }
+    .var-d .text {
+      font-size: 100px;
+      letter-spacing: -4px;
+      line-height: 1;
+      z-index: 2;
+    }
+    .var-d .clock {
+      position: absolute;
+      bottom: 24px;
+      right: 28px;
+      font-size: 36px;
+      opacity: 0.9;
+    }
+    /* Variant E — Pro Blue + 30분 */
+    .var-e {
+      background: #2563EB;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      width: 100%;
+      height: 100%;
+      color: white;
+      font-weight: 900;
+    }
+    .var-e .num {
+      font-size: 36px;
+      opacity: 0.85;
+      letter-spacing: 2px;
+      margin-bottom: 6px;
+    }
+    .var-e .text {
+      font-size: 90px;
+      letter-spacing: -4px;
+      line-height: 1;
+    }
+    /* Variant F — White minimalist */
+    .var-f {
+      background: white;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      width: 100%;
+      height: 100%;
+      color: #111;
+      font-weight: 900;
+      border: 8px solid #111;
+      box-sizing: border-box;
+    }
+    .var-f .text {
+      font-size: 96px;
+      letter-spacing: -4px;
+      line-height: 1;
+    }
+    .var-f .sub {
+      font-size: 14px;
+      color: #FB923C;
+      letter-spacing: 4px;
+      margin-top: 8px;
+    }
+    .actions {
+      margin-top: 16px;
+      font-size: 11px;
+      color: #888;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+  <h1>단바 — 카카오 앱 아이콘 후보</h1>
+  <p class="guide">
+    카카오 콘솔 앱 아이콘 권장 512×512. 아래 6종 중 마음에 드는 것을 클릭→캡처(Snipping Tool, Win+Shift+S)→512×512로 잘라 저장하면 됩니다.
+    또는 Hatchful·Canva에서 디자인 참고용으로 활용. 빠른 dev 단계엔 캡처 그대로도 충분.
+  </p>
+
+  <div class="grid">
+    <div class="card">
+      <h2>A · 따뜻한 커피 브라운</h2>
+      <p>전통적·신뢰감. 30~50대 점주 친화</p>
+      <div class="icon-frame">
+        <div class="var-a">
+          <div class="text">단바</div>
+          <div class="sub">DAN·BA</div>
+        </div>
+      </div>
+      <div class="actions">#5B3A29 그라디언트 · 흰 텍스트</div>
+    </div>
+
+    <div class="card">
+      <h2>B · 활기 오렌지 + ⚡</h2>
+      <p>속도·즉시성. "30분 페이" 강조</p>
+      <div class="icon-frame">
+        <div class="var-b">
+          <div class="bolt">⚡</div>
+          <div class="text">단바</div>
+        </div>
+      </div>
+      <div class="actions">#FB923C → #EA580C · 흰 텍스트</div>
+    </div>
+
+    <div class="card">
+      <h2>C · 모던 다크 + 민트</h2>
+      <p>20~30대 워커 친화. 테크 감성</p>
+      <div class="icon-frame">
+        <div class="var-c">
+          <div class="text">단바</div>
+          <div class="sub">SPOT·WORK</div>
+        </div>
+      </div>
+      <div class="actions">#0F172A · 민트 텍스트</div>
+    </div>
+
+    <div class="card">
+      <h2>D · 친근 코랄 + 시계</h2>
+      <p>경쾌·캐주얼. 알바몬 톤</p>
+      <div class="icon-frame">
+        <div class="var-d">
+          <div class="text">단바</div>
+          <div class="clock">⏱</div>
+        </div>
+      </div>
+      <div class="actions">#FF6B6B → #EE5A6F · 흰 텍스트</div>
+    </div>
+
+    <div class="card">
+      <h2>E · 프로 블루 + "30"</h2>
+      <p>SLA·정량 정체성. B2B 톤</p>
+      <div class="icon-frame">
+        <div class="var-e">
+          <div class="num">30분</div>
+          <div class="text">단바</div>
+        </div>
+      </div>
+      <div class="actions">#2563EB · 흰 텍스트</div>
+    </div>
+
+    <div class="card">
+      <h2>F · 미니멀 화이트</h2>
+      <p>모노톤·세련. 무한 확장성</p>
+      <div class="icon-frame">
+        <div class="var-f">
+          <div class="text">단바</div>
+          <div class="sub">DAN·BA</div>
+        </div>
+      </div>
+      <div class="actions">검정 테두리 · 화이트 · 오렌지 액센트</div>
+    </div>
+  </div>
+
+  <p class="guide" style="margin-top: 40px;">
+    💡 <strong>가장 빠른 추출법:</strong>
+    Chrome / Edge 에서 이 페이지 열기 → 원하는 아이콘에서 우클릭 → "스크린샷" 또는
+    Windows: <kbd>Win+Shift+S</kbd> 로 영역 캡처 → 정사각형으로 자르고 저장 (PNG).<br>
+    또는 DevTools (F12) → 요소 선택 → "Capture node screenshot" 으로 깔끔하게 추출 가능.
+  </p>
+</body>
+</html>

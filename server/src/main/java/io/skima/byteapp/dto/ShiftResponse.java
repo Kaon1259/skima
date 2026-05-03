@@ -25,7 +25,8 @@ public record ShiftResponse(
         Long matchingMinutes,
         JobRole jobRole,
         SkillLevel minSkill,
-        Set<String> requirements
+        Set<String> requirements,
+        LocalDateTime favoritesOnlyUntil
 ) {
     public static ShiftResponse from(Shift s) {
         Long minutes = (s.getMatchedAt() != null && s.getCreatedAt() != null)
@@ -47,7 +48,8 @@ public record ShiftResponse(
                 minutes,
                 s.getJobRole(),
                 s.getMinSkill(),
-                s.getRequirements() == null ? new HashSet<>() : new HashSet<>(s.getRequirements())
+                s.getRequirements() == null ? new HashSet<>() : new HashSet<>(s.getRequirements()),
+                s.getFavoritesOnlyUntil()
         );
     }
 }

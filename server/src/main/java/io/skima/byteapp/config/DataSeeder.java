@@ -66,7 +66,7 @@ public class DataSeeder implements CommandLineRunner {
                 .username("admin").password(pw).name("관리자").phone("010-0000-0000")
                 .role(UserRole.ADMIN).build());
 
-        // 3 owners
+        // 5 owners — owner1~3 은 매장 보유, owner4·5 는 매장 0개 (신규 점주 온보딩 테스트용)
         User owner1 = userRepository.save(User.builder()
                 .username("owner1").password(pw).name("점주김씨").phone("010-1111-1111")
                 .role(UserRole.OWNER).build());
@@ -75,6 +75,12 @@ public class DataSeeder implements CommandLineRunner {
                 .role(UserRole.OWNER).build());
         User owner3 = userRepository.save(User.builder()
                 .username("owner3").password(pw).name("점주박씨").phone("010-3333-3333")
+                .role(UserRole.OWNER).build());
+        userRepository.save(User.builder()
+                .username("owner4").password(pw).name("신규점주최씨").phone("010-4444-4444")
+                .role(UserRole.OWNER).build());
+        userRepository.save(User.builder()
+                .username("owner5").password(pw).name("신규점주정씨").phone("010-5555-5555")
                 .role(UserRole.OWNER).build());
 
         // 4 workers — 등급 다양 (테스트용)
@@ -107,7 +113,7 @@ public class DataSeeder implements CommandLineRunner {
 
         if (!props.getSeed().isCreateShiftsAndApps()) {
             log.info("[SEED] done — users + cafes only (skima.seed.create-shifts-and-apps=false)");
-            log.info("[SEED] login: admin·owner1~3·worker1~4 (모두 비번 pw1234)");
+            log.info("[SEED] login: admin·owner1~5·worker1~4 (모두 비번 pw1234, owner4·5는 빈 점주)");
             return;
         }
 
@@ -133,7 +139,7 @@ public class DataSeeder implements CommandLineRunner {
         applicationRepository.save(ShiftApplication.builder().shift(s5).worker(workers.get(2)).build());
 
         log.info("[SEED] done — 1 admin / 3 owners / 4 workers / 4 cafes / 6 OPEN shifts / 6 pending apps");
-        log.info("[SEED] login: admin·owner1~3·worker1~4 (모두 비번 pw1234)");
+        log.info("[SEED] login: admin·owner1~5·worker1~4 (모두 비번 pw1234, owner4·5는 빈 점주)");
         log.info("[SEED] 시나리오: worker1로 로그인 → 시프트 #1, #4는 '지원 대기' 표시 / #2, #3, #5, #6 만 지원 가능");
     }
 

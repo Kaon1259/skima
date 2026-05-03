@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Modal, Pressable, ScrollView, Text, View } from 'react-native';
+import { Modal, Platform, Pressable, ScrollView, Text, View } from 'react-native';
 import { router } from 'expo-router';
 
 import { Icon } from '@/components/Icon';
@@ -59,6 +59,16 @@ export default function NotificationBell({ role }: Props) {
   const itemKey = (it: NotificationItem) =>
     `${it.type}:${it.targetId ?? ''}:${it.at}`;
 
+  // 입력 포커스 중에는 자동 이동 차단 — 작업 중 갑자기 페이지 바뀌는 거 방지
+  function hasFocusedInput(): boolean {
+    if (Platform.OS !== 'web') return false; // native에선 일단 항상 이동 허용
+    if (typeof document === 'undefined') return false;
+    const el = document.activeElement;
+    if (!el) return false;
+    const tag = el.tagName?.toLowerCase();
+    return tag === 'input' || tag === 'textarea' || el.getAttribute('contenteditable') === 'true';
+  }
+
   const load = useCallback(async () => {
     try {
       const data = await api<NotificationItem[]>(listUrl);
@@ -83,6 +93,19 @@ export default function NotificationBell({ role }: Props) {
           severity: it.severity,
           route: it.route,
         });
+      }
+
+      // 워커: NEW_MATCH 도착 시 자동 이동 (입력 포커스 중이 아닐 때)
+      if (role === 'worker') {
+        const newMatch = fresh.find((it) => it.type === 'NEW_MATCH' && it.route);
+        if (newMatch && !hasFocusedInput()) {
+          // 짧은 딜레이 후 push — 토스트가 잠깐 보인 뒤 이동
+          setTimeout(() => {
+            try {
+              router.push(newMatch.route as never);
+            } catch { /* ignore */ }
+          }, 800);
+        }
       }
       // 사라진 알림 키도 정리 (메모리 누수 방지)
       const liveKeys = new Set(data.map(itemKey));

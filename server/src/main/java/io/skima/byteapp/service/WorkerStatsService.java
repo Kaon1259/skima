@@ -72,7 +72,9 @@ public class WorkerStatsService {
                 rehireRate,
                 noShowRate,
                 ratings.size(),
-                dist
+                dist,
+                WorkerStatsResponse.classifyTier(completed, avgRating, noShow, rehireRate),
+                WorkerStatsResponse.computeTrustScore(completed, avgRating, rehireRate, noShowRate)
         );
     }
 }

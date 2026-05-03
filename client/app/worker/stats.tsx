@@ -4,23 +4,26 @@ import { router, useFocusEffect } from 'expo-router';
 
 import { Icon } from '@/components/Icon';
 import { api } from '@/lib/api';
-import { Rating, WorkerStats, fmtDateTime, fmtKRW, fmtPercent } from '@/lib/types';
+import { Payout, Rating, WorkerStats, fmtDateTime, fmtKRW, fmtPercent } from '@/lib/types';
 import { colors, radius, spacing, styles } from '@/lib/theme';
 
 export default function WorkerStatsScreen() {
   const [stats, setStats] = useState<WorkerStats | null>(null);
   const [ratings, setRatings] = useState<Rating[]>([]);
+  const [payouts, setPayouts] = useState<Payout[]>([]);
   const [refreshing, setRefreshing] = useState(false);
 
   const load = useCallback(async () => {
     setRefreshing(true);
     try {
-      const [s, r] = await Promise.all([
+      const [s, r, p] = await Promise.all([
         api<WorkerStats>('/api/worker/me/stats'),
         api<Rating[]>('/api/worker/me/ratings'),
+        api<Payout[]>('/api/worker/payouts').catch(() => [] as Payout[]),
       ]);
       setStats(s);
       setRatings(r);
+      setPayouts(p);
     } catch (e) {
       const msg = (e as Error).message;
       Platform.OS === 'web' ? window.alert(msg) : Alert.alert('오류', msg);
@@ -72,7 +75,7 @@ export default function WorkerStatsScreen() {
               ]}
             >
               <Text style={{ fontSize: 12 }}>⚙️</Text>
-              <Text style={{ fontSize: 12, fontWeight: '700', color: colors.primary }}>내 능력</Text>
+              <Text style={{ fontSize: 12, fontWeight: '700', color: colors.primary }}>내 프로필</Text>
             </Pressable>
           </View>
 
@@ -119,6 +122,9 @@ export default function WorkerStatsScreen() {
               />
             </View>
           </View>
+
+          {/* 월별 수입 미니 차트 (3개월) */}
+          <MonthlyIncomeChart payouts={payouts} />
 
           {/* 별점 분포 — Day 5 */}
           {ratingsCount > 0 ? (
@@ -217,6 +223,82 @@ export default function WorkerStatsScreen() {
         </Pressable>
       )}
     />
+  );
+}
+
+function MonthlyIncomeChart({ payouts }: { payouts: Payout[] }) {
+  // 최근 6개월 슬롯, 차트는 3개월 표시 (월말까지)
+  const months: { key: string; label: string; net: number; count: number }[] = [];
+  const now = new Date();
+  for (let i = 2; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+    months.push({ key, label: `${d.getMonth() + 1}월`, net: 0, count: 0 });
+  }
+  for (const p of payouts) {
+    if (p.status !== 'COMPLETED') continue;
+    const ref = p.completedAt ?? p.workDate ?? p.triggerAt;
+    if (!ref) continue;
+    const key = ref.slice(0, 7);
+    const slot = months.find((m) => m.key === key);
+    if (slot) {
+      slot.net += p.netAmount ?? 0;
+      slot.count += 1;
+    }
+  }
+  const max = Math.max(1, ...months.map((m) => m.net));
+  const total = months.reduce((s, m) => s + m.net, 0);
+  if (total === 0) return null;
+  return (
+    <View
+      style={{
+        marginTop: 14,
+        padding: 16,
+        borderRadius: radius.lg,
+        backgroundColor: colors.surface,
+        borderWidth: 1,
+        borderColor: colors.border,
+      }}
+    >
+      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 12 }}>
+        <Text style={{ fontSize: 11, color: colors.textMuted, fontWeight: '700', letterSpacing: 0.5 }}>
+          최근 3개월 수입
+        </Text>
+        <Text style={{ fontSize: 11, color: colors.textLight }}>
+          이번달 {fmtKRW(months[months.length - 1]?.net ?? 0)}
+        </Text>
+      </View>
+      <View style={{ flexDirection: 'row', gap: 12, alignItems: 'flex-end', height: 120 }}>
+        {months.map((m) => {
+          const h = max === 0 ? 0 : Math.round((m.net / max) * 90);
+          const isCurrent = m.key === months[months.length - 1].key;
+          return (
+            <View key={m.key} style={{ flex: 1, alignItems: 'center' }}>
+              <Text style={{ fontSize: 11, fontWeight: '800', color: colors.text, marginBottom: 4 }}>
+                {m.net > 0 ? fmtKRW(m.net) : '—'}
+              </Text>
+              <View
+                style={{
+                  width: '100%',
+                  height: Math.max(2, h),
+                  backgroundColor: isCurrent ? colors.primary : colors.primarySoft,
+                  borderTopLeftRadius: 6,
+                  borderTopRightRadius: 6,
+                }}
+              />
+              <Text style={{ fontSize: 11, color: colors.textMuted, fontWeight: '700', marginTop: 6 }}>
+                {m.label}
+              </Text>
+              {m.count > 0 ? (
+                <Text style={{ fontSize: 10, color: colors.textLight }}>
+                  {m.count}건
+                </Text>
+              ) : null}
+            </View>
+          );
+        })}
+      </View>
+    </View>
   );
 }
 

@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<style>
+  html, body { margin: 0; padding: 0; width: 1024px; height: 1024px; background: transparent; overflow: hidden; }
+  .frame {
+    width: 1024px; height: 1024px;
+    display: flex; align-items: center; justify-content: center;
+    position: relative;
+    font-family: 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif;
+  }
+  /* Android adaptive icon safe zone: keep core content within 66% center */
+  .bolt {
+    position: absolute;
+    width: 60%; height: 60%;
+    top: 20%; left: 20%;
+    filter: drop-shadow(0 16px 40px rgba(0,0,0,0.3));
+  }
+  .bolt path { fill: #FFEB3B; }
+  .text {
+    font-weight: 900;
+    font-size: 280px;
+    color: white;
+    letter-spacing: -16px;
+    z-index: 2;
+    text-shadow: 0 12px 40px rgba(0,0,0,0.45);
+    line-height: 1;
+  }
+</style>
+</head>
+<body>
+<div class="frame">
+  <svg class="bolt" viewBox="0 0 200 200" preserveAspectRatio="xMidYMid meet">
+    <path d="M115 10 L70 110 L100 110 L60 200 L150 80 L115 80 Z"/>
+  </svg>
+  <div class="text">단바</div>
+</div>
+</body>
+</html>

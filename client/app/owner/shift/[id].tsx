@@ -1,15 +1,19 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Alert, FlatList, Platform, Pressable, RefreshControl, Text, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 
+import { Avatar } from '@/components/Avatar';
 import { ChatSheet } from '@/components/ChatSheet';
+import { HealthCertBadge } from '@/components/HealthCertBadge';
+import { TrustScoreBadge } from '@/components/TrustScoreBadge';
 import { Icon } from '@/components/Icon';
+import { NoShowResult, NoShowResultModal } from '@/components/NoShowResultModal';
 import { RatingModal, blurFocusedForModal } from '@/components/RatingModal';
 import ShiftSkillBadges from '@/components/ShiftSkillBadges';
 import SkillMatchSummary from '@/components/SkillMatchSummary';
+import { WorkerTierBadge } from '@/components/WorkerTierBadge';
 import { api } from '@/lib/api';
 import { useFocusPolling } from '@/lib/useFocusPolling';
-import { useToast } from '@/lib/toast';
 import {
   OwnerShift,
   ShiftApplication,
@@ -20,9 +24,8 @@ import {
 import { colors, radius, spacing, statusVisual, styles } from '@/lib/theme';
 
 export default function ShiftApplicantsScreen() {
-  const { id, action } = useLocalSearchParams<{ id: string; action?: string }>();
+  const { id, action, firstTime } = useLocalSearchParams<{ id: string; action?: string; firstTime?: string }>();
   const shiftId = id;
-  const toast = useToast();
   const [shift, setShift] = useState<OwnerShift | null>(null);
   const [apps, setApps] = useState<ShiftApplication[]>([]);
   const [refreshing, setRefreshing] = useState(false);
@@ -33,6 +36,7 @@ export default function ShiftApplicantsScreen() {
   const [approveTarget, setApproveTarget] = useState<{ matchId: number; workerName: string } | null>(null);
   const [postRateTarget, setPostRateTarget] = useState<{ matchId: number; workerName: string } | null>(null);
   const [busyNoShow, setBusyNoShow] = useState(false);
+  const [noShowResult, setNoShowResult] = useState<NoShowResult | null>(null);
   const openChat = (matchId: number, cafeName: string) => {
     blurFocusedForModal();
     setChatTarget({ matchId, cafeName });
@@ -58,14 +62,17 @@ export default function ShiftApplicantsScreen() {
 
   useFocusPolling(load, 10000);
 
-  // 알림에서 ?action=approve 로 진입 시 정산 승인 모달 자동 오픈
+  // 알림에서 ?action=approve 로 진입 시 정산 승인 모달 자동 오픈 — 화면 라이프사이클당 1회만
+  const autoOpenedRef = useRef(false);
   useEffect(() => {
+    if (autoOpenedRef.current) return;
     if (action === 'approve' && shift?.matchId && shift.matchedWorkerName
-        && shift.payoutStatus === 'REQUESTED' && !approveTarget) {
+        && shift.payoutStatus === 'REQUESTED') {
+      autoOpenedRef.current = true;
       blurFocusedForModal();
       setApproveTarget({ matchId: shift.matchId, workerName: shift.matchedWorkerName });
     }
-  }, [action, shift, approveTarget]);
+  }, [action, shift]);
 
   // 지원자별 워커 stats + repeat count 비동기 로딩
   useEffect(() => {
@@ -129,31 +136,14 @@ export default function ShiftApplicantsScreen() {
         `/api/owner/matches/${matchId}/no-show`,
         { method: 'POST' },
       );
-      if (r.backupMatched) {
-        toast.push({
-          title: `✅ 백업 워커 자동 매칭 — ${r.backupWorkerName ?? '워커'}`,
-          subtitle: '대기 지원자 중 가장 먼저 지원한 워커가 시프트를 이어받습니다',
-          severity: 'success',
-          ttl: 6500,
-        });
-      } else if (r.shiftReopened) {
-        const sub = r.favoritingWorkerCount > 0
-          ? `백업 후보가 없어 시프트가 OPEN 으로 재모집됐어요. 단골 ${r.favoritingWorkerCount}명이 알림을 받습니다`
-          : '백업 후보가 없어 시프트가 OPEN 으로 재모집됐어요. 새 지원자가 들어올 때까지 대기';
-        toast.push({
-          title: '🔄 시프트 재모집 시작',
-          subtitle: sub,
-          severity: 'warn',
-          ttl: 7000,
-        });
-      } else {
-        toast.push({
-          title: '노쇼 등록 완료',
-          subtitle: '★1 평가 자동 등록 + 워커 알림 발송',
-          severity: 'info',
-          ttl: 5000,
-        });
-      }
+      setNoShowResult({
+        workerName,
+        backupMatched: r.backupMatched,
+        shiftReopened: r.shiftReopened,
+        backupWorkerName: r.backupWorkerName,
+        backupMatchId: r.backupMatchId,
+        favoritingWorkerCount: r.favoritingWorkerCount,
+      });
       load();
     } catch (e) {
       notify((e as Error).message);
@@ -173,6 +163,30 @@ export default function ShiftApplicantsScreen() {
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={load} tintColor={colors.primary} />}
       ListHeaderComponent={
         <View>
+          {firstTime === '1' ? (
+            <View
+              style={{
+                marginBottom: spacing.md,
+                padding: 14,
+                borderRadius: radius.lg,
+                backgroundColor: colors.successSoft,
+                borderWidth: 1.5,
+                borderColor: colors.success,
+              }}
+            >
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+                <Text style={{ fontSize: 22 }}>🎉</Text>
+                <Text style={{ fontSize: 14, fontWeight: '900', color: colors.success, flex: 1 }}>
+                  첫 시프트 등록 완료!
+                </Text>
+              </View>
+              <Text style={{ fontSize: 12, color: colors.text, lineHeight: 18 }}>
+                • 1시간 매칭 SLA 시작 — 워커 지원이 들어오면 헤더 종(🔔)으로 알림이 옵니다{'\n'}
+                • 지원자가 들어오면 이 화면 하단에서 매칭 확정 가능{'\n'}
+                • 워커 출근 → 퇴근 → 30분 자동 입금 (정산 승인 시 5분 내)
+              </Text>
+            </View>
+          ) : null}
           <Text style={styles.h2}>시프트 #{shiftId}</Text>
           {shift ? (
             <ShiftTimeline
@@ -221,23 +235,13 @@ export default function ShiftApplicantsScreen() {
               onPress={() => router.push(`/u/${item.workerId}` as never)}
             >
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 }}>
-                <View
-                  style={{
-                    width: 44,
-                    height: 44,
-                    borderRadius: 22,
-                    backgroundColor: colors.primarySoft,
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                  }}
-                >
-                  <Text style={{ color: colors.primary, fontWeight: '800' }}>
-                    {item.workerName.slice(-1)}
-                  </Text>
-                </View>
+                <Avatar name={item.workerName} imageUrl={item.workerProfileImage} size={44} />
                 <View style={{ flex: 1 }}>
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
                     <Text style={styles.title}>{item.workerName}</Text>
+                    <TrustScoreBadge score={stats?.trustScore} />
+                    <WorkerTierBadge tier={stats?.tier} />
+                    <HealthCertBadge status={item.workerHealthCertStatus} size="xs" />
                     <Icon name="chevron-forward" size={14} color={colors.textLight} />
                     {repeat > 0 ? (
                       <View
@@ -348,6 +352,11 @@ export default function ShiftApplicantsScreen() {
         setPostRateTarget(null);
         load();
       }}
+    />
+    <NoShowResultModal
+      visible={noShowResult != null}
+      result={noShowResult}
+      onClose={() => setNoShowResult(null)}
     />
     </>
   );

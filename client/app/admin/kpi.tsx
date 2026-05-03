@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Alert, Animated, Easing, Platform, Pressable, RefreshControl, ScrollView, Text, View } from 'react-native';
-import { useFocusEffect } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import { Icon } from '@/components/Icon';
 
 import { api } from '@/lib/api';
@@ -93,6 +93,33 @@ export default function KpiScreen() {
           최근 30일 · 단 두 개의 숫자가 이 사업의 모든 것
         </Text>
       </View>
+
+      {/* 운영 진입 — 보건증 검토 등 */}
+      <Pressable
+        onPress={() => router.push('/admin/health-certs' as never)}
+        style={({ pressed }) => [
+          {
+            flexDirection: 'row', alignItems: 'center', gap: 12,
+            padding: 14,
+            borderRadius: radius.md,
+            backgroundColor: colors.surface,
+            borderWidth: 1.5, borderColor: colors.warn,
+            marginBottom: spacing.md,
+          },
+          pressed && { opacity: 0.85 },
+        ]}
+      >
+        <Text style={{ fontSize: 22 }}>📋</Text>
+        <View style={{ flex: 1 }}>
+          <Text style={{ fontSize: 14, fontWeight: '800', color: colors.warn }}>
+            보건증 검토
+          </Text>
+          <Text style={{ fontSize: 11, color: colors.textMuted, marginTop: 2 }}>
+            워커 업로드한 보건증 인증/거부
+          </Text>
+        </View>
+        <Text style={{ fontSize: 16, color: colors.warn }}>›</Text>
+      </Pressable>
 
       <KpiCard
         accent={colors.primary}

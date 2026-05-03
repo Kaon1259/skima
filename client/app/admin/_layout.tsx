@@ -17,6 +17,7 @@ export default function AdminLayout() {
         }}
       >
         <Stack.Screen name="kpi" options={{ title: '북극성 KPI' }} />
+        <Stack.Screen name="health-certs" options={{ title: '보건증 검토' }} />
       </Stack>
     </AuthGate>
   );

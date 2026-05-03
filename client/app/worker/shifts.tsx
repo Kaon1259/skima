@@ -1,10 +1,16 @@
-import { useCallback, useMemo, useState } from 'react';
-import { Alert, FlatList, Platform, Pressable, RefreshControl, Text, View } from 'react-native';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Alert, FlatList, Platform, Pressable, RefreshControl, ScrollView, Text, View } from 'react-native';
 import { router } from 'expo-router';
 import { Icon } from '@/components/Icon';
 import ShiftSkillBadges from '@/components/ShiftSkillBadges';
+import { TrustScoreBadge } from '@/components/TrustScoreBadge';
+import { WorkerHomeWidgets } from '@/components/WorkerHomeWidgets';
+import { WorkerOnboardingTutorial } from '@/components/WorkerOnboardingTutorial';
 import { api, ApiError } from '@/lib/api';
+import { Coords, distanceKm, getCurrentCoords } from '@/lib/geolocation';
+import { storage } from '@/lib/storage';
 import { useFocusPolling } from '@/lib/useFocusPolling';
+import { useWorkerPrefs } from '@/lib/workerPrefs';
 import {
   JobRole,
   MyProfile,
@@ -32,15 +38,64 @@ function durationHours(startIso: string, endIso: string) {
   return Math.round((ms / (1000 * 60 * 60)) * 10) / 10;
 }
 
-type SortMode = 'time' | 'rating' | 'wage';
+type SortMode = 'time' | 'rating' | 'wage' | 'distance';
+type TimeFilter = 'any' | 'morning' | 'afternoon' | 'evening' | 'night';
+type DayFilter = 'any' | 'today' | 'thisweek' | 'weekend';
+type WageFilter = 'any' | '12k' | '15k';
+type DistanceFilter = 'any' | '5' | '10' | '30';
+
+const DISTANCE_LIMIT_KM: Record<DistanceFilter, number | null> = {
+  any: null,
+  '5': 5,
+  '10': 10,
+  '30': 30,
+};
+
+const FILTER_STORAGE_KEY = 'skima.worker.shiftFilters';
+
+const TIME_RANGES: Record<TimeFilter, { from: number; to: number; label: string; emoji: string }> = {
+  any: { from: 0, to: 24, label: '전체', emoji: '⏱' },
+  morning: { from: 5, to: 11, label: '오전', emoji: '🌅' },
+  afternoon: { from: 11, to: 17, label: '오후', emoji: '🌤️' },
+  evening: { from: 17, to: 22, label: '저녁', emoji: '🌆' },
+  night: { from: 22, to: 5, label: '심야', emoji: '🌙' },
+};
+
+const DAY_LABEL: Record<DayFilter, { label: string; emoji: string }> = {
+  any: { label: '전체', emoji: '📅' },
+  today: { label: '오늘', emoji: '⚡' },
+  thisweek: { label: '이번주', emoji: '🗓' },
+  weekend: { label: '주말', emoji: '🎉' },
+};
+
+const WAGE_LABEL: Record<WageFilter, string> = {
+  any: '전체',
+  '12k': '시급 12k+',
+  '15k': '시급 15k+',
+};
 
 export default function WorkerShiftsScreen() {
   const [shifts, setShifts] = useState<WorkerShift[]>([]);
   const [me, setMe] = useState<MyProfile | null>(null);
+  const [favIds, setFavIds] = useState<Set<number>>(new Set());
   const [refreshing, setRefreshing] = useState(false);
   const [busyId, setBusyId] = useState<number | null>(null);
+
+  // 필터 상태 (임시 — 화면 칩)
   const [fitOnly, setFitOnly] = useState(false);
+  const [favOnly, setFavOnly] = useState(false);
+  const [timeFilter, setTimeFilter] = useState<TimeFilter>('any');
+  const [dayFilter, setDayFilter] = useState<DayFilter>('any');
+  const [wageFilter, setWageFilter] = useState<WageFilter>('any');
+  const [distanceFilter, setDistanceFilter] = useState<DistanceFilter>('any');
   const [sortMode, setSortMode] = useState<SortMode>('time');
+  const [filtersLoaded, setFiltersLoaded] = useState(false);
+
+  // 워커 현재 위치 (GPS, best-effort)
+  const [myCoords, setMyCoords] = useState<Coords | null>(null);
+
+  // 영구 필터 (마이 탭 선호 조건)
+  const { prefs } = useWorkerPrefs();
 
   const myLevelRank = me?.selfReportedLevel
     ? SKILL_LEVEL_ORDER[me.selfReportedLevel]
@@ -71,16 +126,103 @@ export default function WorkerShiftsScreen() {
   );
 
   const visibleShifts = useMemo(() => {
-    let xs = fitOnly ? shifts.filter(isFitForMe) : shifts.slice();
+    const now = new Date();
+    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const endOfToday = new Date(startOfToday.getTime() + 24 * 3600 * 1000);
+    const dow = (now.getDay() + 6) % 7; // 월=0
+    const weekStart = new Date(startOfToday.getTime() - dow * 24 * 3600 * 1000);
+    const weekEnd = new Date(weekStart.getTime() + 7 * 24 * 3600 * 1000);
+
+    let xs = shifts.slice();
+
+    // 영구 필터 (마이 탭 선호 조건) — 단골 등록 매장은 면제 (사용자가 명시 선택)
+    if (prefs.minWage > 0) {
+      xs = xs.filter((s) => favIds.has(s.cafeId) || s.hourlyWage >= prefs.minWage);
+    }
+    if (prefs.minCafeRating != null) {
+      const min = prefs.minCafeRating;
+      xs = xs.filter((s) => favIds.has(s.cafeId) || s.cafeAvgRating == null || s.cafeAvgRating >= min);
+    }
+    if (prefs.maxCafeNoShowRate != null) {
+      const max = prefs.maxCafeNoShowRate;
+      xs = xs.filter((s) => favIds.has(s.cafeId) || s.cafeNoShowRate == null || s.cafeNoShowRate <= max);
+    }
+    if (prefs.maxDistanceKm != null && myCoords) {
+      const limit = prefs.maxDistanceKm;
+      xs = xs.filter((s) => {
+        if (favIds.has(s.cafeId)) return true;
+        if (s.cafeLatitude == null || s.cafeLongitude == null) return true; // 좌표 없는 매장은 면제
+        const d = distanceKm(myCoords, { latitude: s.cafeLatitude, longitude: s.cafeLongitude });
+        return d <= limit;
+      });
+    }
+
+    // 임시 거리 필터 (화면 칩) — 영구보다 좁히는 의미
+    const tempLimit = DISTANCE_LIMIT_KM[distanceFilter];
+    if (tempLimit != null && myCoords) {
+      xs = xs.filter((s) => {
+        if (s.cafeLatitude == null || s.cafeLongitude == null) return false; // 좌표 없으면 거리 측정 불가 — 제외
+        const d = distanceKm(myCoords, { latitude: s.cafeLatitude, longitude: s.cafeLongitude });
+        return d <= tempLimit;
+      });
+    }
+
+    // 임시 필터 (화면 칩)
+    if (fitOnly) xs = xs.filter(isFitForMe);
+    if (favOnly) xs = xs.filter((s) => favIds.has(s.cafeId));
+    if (wageFilter === '12k') xs = xs.filter((s) => s.hourlyWage >= 12000);
+    if (wageFilter === '15k') xs = xs.filter((s) => s.hourlyWage >= 15000);
+    if (timeFilter !== 'any') {
+      const r = TIME_RANGES[timeFilter];
+      xs = xs.filter((s) => {
+        if (!s.startAt) return false;
+        const h = new Date(s.startAt).getHours();
+        if (r.from < r.to) return h >= r.from && h < r.to;
+        // wrap (밤): 22~24 or 0~5
+        return h >= r.from || h < r.to;
+      });
+    }
+    if (dayFilter !== 'any') {
+      xs = xs.filter((s) => {
+        if (!s.startAt) return false;
+        const t = new Date(s.startAt).getTime();
+        if (dayFilter === 'today') return t >= startOfToday.getTime() && t < endOfToday.getTime();
+        if (dayFilter === 'thisweek') return t >= weekStart.getTime() && t < weekEnd.getTime();
+        if (dayFilter === 'weekend') {
+          const d = new Date(s.startAt).getDay();
+          return d === 0 || d === 6;
+        }
+        return true;
+      });
+    }
     if (sortMode === 'rating') {
       xs.sort((a, b) => (b.cafeAvgRating ?? -1) - (a.cafeAvgRating ?? -1));
     } else if (sortMode === 'wage') {
       xs.sort((a, b) => b.hourlyWage - a.hourlyWage);
+    } else if (sortMode === 'distance' && myCoords) {
+      const dist = (s: WorkerShift) => {
+        if (s.cafeLatitude == null || s.cafeLongitude == null) return Number.POSITIVE_INFINITY;
+        return distanceKm(myCoords, { latitude: s.cafeLatitude, longitude: s.cafeLongitude });
+      };
+      xs.sort((a, b) => dist(a) - dist(b));
     } else {
       xs.sort((a, b) => (a.startAt ?? '').localeCompare(b.startAt ?? ''));
     }
     return xs;
-  }, [shifts, fitOnly, sortMode, isFitForMe]);
+  }, [shifts, fitOnly, favOnly, favIds, wageFilter, timeFilter, dayFilter, distanceFilter, sortMode, isFitForMe, prefs, myCoords]);
+
+  const activeFilterCount = (fitOnly ? 1 : 0) + (favOnly ? 1 : 0)
+    + (timeFilter !== 'any' ? 1 : 0) + (dayFilter !== 'any' ? 1 : 0) + (wageFilter !== 'any' ? 1 : 0)
+    + (distanceFilter !== 'any' ? 1 : 0);
+
+  function resetFilters() {
+    setFitOnly(false);
+    setFavOnly(false);
+    setTimeFilter('any');
+    setDayFilter('any');
+    setWageFilter('any');
+    setDistanceFilter('any');
+  }
 
   const profileIncomplete = !!me
     && me.role === 'WORKER'
@@ -89,12 +231,14 @@ export default function WorkerShiftsScreen() {
   const load = useCallback(async () => {
     setRefreshing(true);
     try {
-      const [data, profile] = await Promise.all([
+      const [data, profile, favs] = await Promise.all([
         api<WorkerShift[]>('/api/worker/shifts'),
         api<MyProfile>('/api/me').catch(() => null),
+        api<number[]>('/api/worker/favorites/cafes').catch(() => [] as number[]),
       ]);
       setShifts(data);
       if (profile) setMe(profile);
+      setFavIds(new Set(favs));
     } catch (e) {
       notify((e as Error).message);
     } finally {
@@ -103,6 +247,41 @@ export default function WorkerShiftsScreen() {
   }, []);
 
   useFocusPolling(load, 15000);
+
+  // GPS 한 번만 가져오기 (best-effort) — 거리 필터/정렬용. 권한 거부면 그냥 비활성
+  useEffect(() => {
+    let alive = true;
+    getCurrentCoords()
+      .then((c) => { if (alive) setMyCoords(c); })
+      .catch(() => { /* silent — 거리 기능만 비활성 */ });
+    return () => { alive = false; };
+  }, []);
+
+  // 필터 상태 영구 저장 — AsyncStorage 로드/세이브
+  useEffect(() => {
+    storage.get(FILTER_STORAGE_KEY).then((raw) => {
+      if (raw) {
+        try {
+          const v = JSON.parse(raw);
+          if (typeof v.fitOnly === 'boolean') setFitOnly(v.fitOnly);
+          if (typeof v.favOnly === 'boolean') setFavOnly(v.favOnly);
+          if (typeof v.timeFilter === 'string') setTimeFilter(v.timeFilter as TimeFilter);
+          if (typeof v.dayFilter === 'string') setDayFilter(v.dayFilter as DayFilter);
+          if (typeof v.wageFilter === 'string') setWageFilter(v.wageFilter as WageFilter);
+          if (typeof v.distanceFilter === 'string') setDistanceFilter(v.distanceFilter as DistanceFilter);
+          if (typeof v.sortMode === 'string') setSortMode(v.sortMode as SortMode);
+        } catch { /* ignore */ }
+      }
+      setFiltersLoaded(true);
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!filtersLoaded) return;
+    storage.set(FILTER_STORAGE_KEY, JSON.stringify({
+      fitOnly, favOnly, timeFilter, dayFilter, wageFilter, distanceFilter, sortMode,
+    }));
+  }, [fitOnly, favOnly, timeFilter, dayFilter, wageFilter, distanceFilter, sortMode, filtersLoaded]);
 
   async function apply(shiftId: number) {
     setBusyId(shiftId);
@@ -146,6 +325,8 @@ export default function WorkerShiftsScreen() {
   }
 
   return (
+    <>
+    <WorkerOnboardingTutorial />
     <FlatList
       style={{ backgroundColor: colors.surfaceAlt }}
       contentContainerStyle={{ padding: spacing.lg, paddingBottom: 100 }}
@@ -155,6 +336,9 @@ export default function WorkerShiftsScreen() {
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={load} tintColor={colors.primary} />}
       ListHeaderComponent={
         <View style={{ marginBottom: spacing.lg }}>
+          {/* 워커 홈 위젯들 — 오늘 매칭/다음 매칭/이번주 받을 돈/평점·단골/단골 매장 새 시프트 */}
+          <WorkerHomeWidgets />
+
           <Text style={styles.h2}>지금 일할 수 있는 시프트</Text>
           <Text style={[styles.subtitle, { marginTop: 4 }]}>1탭 지원 · 면접 없음 · 30분 내 입금</Text>
 
@@ -189,11 +373,42 @@ export default function WorkerShiftsScreen() {
             </Pressable>
           ) : null}
 
-          {/* 정렬 + 필터 */}
-          <View style={{ marginTop: 14, flexDirection: 'row', flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>
-            {(['time', 'rating', 'wage'] as SortMode[]).map((m) => {
+          {/* 선호 조건 적용 중 안내 (영구 필터) */}
+          {(prefs.minWage > 0 || prefs.minCafeRating != null || prefs.maxCafeNoShowRate != null) ? (
+            <Pressable
+              onPress={() => router.push('/worker/me' as never)}
+              style={({ pressed }) => [
+                {
+                  marginTop: 14,
+                  paddingHorizontal: 12,
+                  paddingVertical: 8,
+                  borderRadius: radius.md,
+                  backgroundColor: colors.primarySoft,
+                  borderWidth: 1,
+                  borderColor: colors.primary,
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  gap: 8,
+                },
+                pressed && { opacity: 0.85 },
+              ]}
+            >
+              <Text style={{ fontSize: 14 }}>🎯</Text>
+              <Text style={{ fontSize: 11, fontWeight: '700', color: colors.primaryDark, flex: 1 }} numberOfLines={1}>
+                선호 조건 적용 중
+                {prefs.minWage > 0 ? ` · 시급 ${prefs.minWage / 1000}k+` : ''}
+                {prefs.minCafeRating != null ? ` · ★${prefs.minCafeRating.toFixed(1)}+` : ''}
+                {prefs.maxCafeNoShowRate != null ? ` · 노쇼 ≤${Math.round(prefs.maxCafeNoShowRate * 100)}%` : ''}
+              </Text>
+              <Text style={{ fontSize: 10, fontWeight: '700', color: colors.primary }}>변경 ›</Text>
+            </Pressable>
+          ) : null}
+
+          {/* 정렬 칩 */}
+          <View style={{ marginTop: 14, flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
+            {(['time', 'rating', 'wage', ...(myCoords ? ['distance' as SortMode] : [])] as SortMode[]).map((m) => {
               const active = sortMode === m;
-              const label = m === 'time' ? '⏰ 시작순' : m === 'rating' ? '★ 별점순' : '💰 시급순';
+              const label = m === 'time' ? '⏰ 시작순' : m === 'rating' ? '★ 별점순' : m === 'wage' ? '💰 시급순' : '📍 가까운순';
               return (
                 <Pressable
                   key={m}
@@ -216,32 +431,129 @@ export default function WorkerShiftsScreen() {
                 </Pressable>
               );
             })}
+          </View>
+
+          {/* 거리 필터 (GPS 활성 시만 노출) */}
+          {myCoords ? (
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={{ gap: 6, paddingRight: spacing.lg }}
+              style={{ marginTop: 8 }}
+            >
+              {(['any', '5', '10', '30'] as DistanceFilter[]).map((d) => {
+                const active = distanceFilter === d;
+                const label = d === 'any' ? '📍 전체' : `📍 ${d}km 이내`;
+                return (
+                  <FilterChip
+                    key={d}
+                    label={label}
+                    active={active}
+                    onPress={() => setDistanceFilter(d)}
+                    accent={colors.primary}
+                  />
+                );
+              })}
+            </ScrollView>
+          ) : null}
+
+          {/* 빠른 필터 칩 row 1 — 시간대 */}
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={{ gap: 6, paddingRight: spacing.lg }}
+            style={{ marginTop: 8 }}
+          >
+            {(['any', 'morning', 'afternoon', 'evening', 'night'] as TimeFilter[]).map((t) => {
+              const active = timeFilter === t;
+              const meta = TIME_RANGES[t];
+              return (
+                <FilterChip
+                  key={t}
+                  label={`${meta.emoji} ${meta.label}`}
+                  active={active}
+                  onPress={() => setTimeFilter(t)}
+                  accent={colors.info}
+                />
+              );
+            })}
+          </ScrollView>
+
+          {/* 빠른 필터 칩 row 2 — 요일 + 시급 */}
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={{ gap: 6, paddingRight: spacing.lg }}
+            style={{ marginTop: 6 }}
+          >
+            {(['any', 'today', 'thisweek', 'weekend'] as DayFilter[]).map((d) => {
+              const active = dayFilter === d;
+              const meta = DAY_LABEL[d];
+              return (
+                <FilterChip
+                  key={d}
+                  label={`${meta.emoji} ${meta.label}`}
+                  active={active}
+                  onPress={() => setDayFilter(d)}
+                  accent={colors.warn}
+                />
+              );
+            })}
+            {(['any', '12k', '15k'] as WageFilter[]).map((w) => {
+              if (w === 'any') return null;
+              const active = wageFilter === w;
+              return (
+                <FilterChip
+                  key={w}
+                  label={`💰 ${WAGE_LABEL[w]}`}
+                  active={active}
+                  onPress={() => setWageFilter(active ? 'any' : w)}
+                  accent={colors.success}
+                />
+              );
+            })}
+          </ScrollView>
+
+          {/* 토글 row — 단골만 / 능력 매칭만 / 초기화 */}
+          <View style={{ marginTop: 8, flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
+            <FilterChip
+              label={favOnly ? '✓ ⭐ 단골만' : '⭐ 단골 매장만'}
+              active={favOnly}
+              onPress={() => setFavOnly((v) => !v)}
+              accent={colors.warn}
+            />
             {myLevelRank != null || myRolesSet.size > 0 || myCertsSet.size > 0 ? (
-              <Pressable
+              <FilterChip
+                label={fitOnly ? '✓ 내 능력 매칭' : '🎯 내 능력 매칭'}
+                active={fitOnly}
                 onPress={() => setFitOnly((v) => !v)}
+                accent={colors.success}
+              />
+            ) : null}
+            {activeFilterCount > 0 ? (
+              <Pressable
+                onPress={resetFilters}
                 style={({ pressed }) => [
                   {
                     paddingHorizontal: 10,
                     paddingVertical: 6,
                     borderRadius: radius.pill,
-                    backgroundColor: fitOnly ? colors.success : colors.surface,
+                    backgroundColor: colors.dangerSoft,
                     borderWidth: 1,
-                    borderColor: fitOnly ? colors.success : colors.border,
-                    flexDirection: 'row',
-                    gap: 4,
-                    alignItems: 'center',
+                    borderColor: colors.danger,
                   },
                   pressed && { opacity: 0.85 },
                 ]}
               >
-                <Text style={{ fontSize: 11, fontWeight: '800', color: fitOnly ? '#fff' : colors.text }}>
-                  {fitOnly ? '✓ 내 능력 매칭만' : '내 능력 매칭만'}
+                <Text style={{ fontSize: 11, fontWeight: '800', color: colors.danger }}>
+                  ✕ 초기화 ({activeFilterCount})
                 </Text>
               </Pressable>
             ) : null}
           </View>
-          <Text style={{ fontSize: 11, color: colors.textMuted, marginTop: 6 }}>
-            {visibleShifts.length}건 표시{fitOnly && shifts.length !== visibleShifts.length
+
+          <Text style={{ fontSize: 11, color: colors.textMuted, marginTop: 8 }}>
+            {visibleShifts.length}건 표시{activeFilterCount > 0 && shifts.length !== visibleShifts.length
               ? ` (전체 ${shifts.length}건 중)`
               : ''}
           </Text>
@@ -342,6 +654,10 @@ export default function WorkerShiftsScreen() {
         const myStatus = item.myApplicationStatus;
         const alreadyApplied = myStatus === 'PENDING';
         const wasRejected = myStatus === 'REJECTED';
+        const isFavCafe = item.isFavoriteCafe || favIds.has(item.cafeId);
+        const dKm = (myCoords && item.cafeLatitude != null && item.cafeLongitude != null)
+          ? distanceKm(myCoords, { latitude: item.cafeLatitude, longitude: item.cafeLongitude })
+          : null;
 
         return (
           <View
@@ -349,6 +665,11 @@ export default function WorkerShiftsScreen() {
               styles.card,
               alreadyApplied && { borderWidth: 1.5, borderColor: colors.primary },
               wasRejected && { opacity: 0.6 },
+              isFavCafe && {
+                borderLeftWidth: 4,
+                borderLeftColor: colors.warn,
+                backgroundColor: colors.warnSoft,
+              },
             ]}
           >
             <View style={{ flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between' }}>
@@ -374,6 +695,18 @@ export default function WorkerShiftsScreen() {
                 >
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
                     <Text style={styles.title}>{item.cafeName}</Text>
+                    {isFavCafe ? (
+                      <View
+                        style={{
+                          paddingHorizontal: 6,
+                          paddingVertical: 1,
+                          borderRadius: radius.pill,
+                          backgroundColor: colors.warn,
+                        }}
+                      >
+                        <Text style={{ fontSize: 10, fontWeight: '900', color: '#fff' }}>⭐ 단골</Text>
+                      </View>
+                    ) : null}
                     <Icon name="chevron-forward" size={14} color={colors.textLight} />
                     {item.cafeAvgRating != null ? (
                       <Text style={{ fontSize: 12, fontWeight: '800', color: colors.warn }}>
@@ -385,6 +718,10 @@ export default function WorkerShiftsScreen() {
                     ) : (
                       <Text style={{ fontSize: 11, color: colors.textLight, fontWeight: '600' }}>★ 신규</Text>
                     )}
+                    {/* 매장 신뢰도 점수 — null 이면 숨김 (데이터 부족) */}
+                    {item.cafeTrustScore != null ? (
+                      <TrustScoreBadge score={item.cafeTrustScore} size="xs" showLabel={false} />
+                    ) : null}
                     {item.cafeNoShowRate != null && item.cafeNoShowRate > 0 ? (
                       <View
                         style={{
@@ -404,6 +741,11 @@ export default function WorkerShiftsScreen() {
                     {item.cafeType ? (
                       <Text style={[styles.bodyMuted, { fontSize: 11, fontWeight: '700' }]}>
                         {cafeTypeLabel(item.cafeType)}
+                      </Text>
+                    ) : null}
+                    {dKm != null ? (
+                      <Text style={[styles.bodyMuted, { fontSize: 11, fontWeight: '700', color: colors.primary }]}>
+                        · 📍 {dKm < 1 ? `${Math.round(dKm * 1000)}m` : `${dKm.toFixed(1)}km`}
                       </Text>
                     ) : null}
                     <Text style={[styles.bodyMuted, { fontSize: 11 }]} numberOfLines={1}>
@@ -469,6 +811,40 @@ export default function WorkerShiftsScreen() {
         );
       }}
     />
+    </>
+  );
+}
+
+function FilterChip({
+  label,
+  active,
+  onPress,
+  accent,
+}: {
+  label: string;
+  active: boolean;
+  onPress: () => void;
+  accent: string;
+}) {
+  return (
+    <Pressable
+      onPress={onPress}
+      style={({ pressed }) => [
+        {
+          paddingHorizontal: 10,
+          paddingVertical: 6,
+          borderRadius: radius.pill,
+          backgroundColor: active ? accent : colors.surface,
+          borderWidth: 1,
+          borderColor: active ? accent : colors.border,
+        },
+        pressed && { opacity: 0.85 },
+      ]}
+    >
+      <Text style={{ fontSize: 11, fontWeight: '800', color: active ? '#fff' : colors.text }}>
+        {label}
+      </Text>
+    </Pressable>
   );
 }
 

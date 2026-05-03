@@ -20,6 +20,7 @@ import io.skima.byteapp.dto.CafeStatsResponse;
 import io.skima.byteapp.dto.ContractResponse;
 import io.skima.byteapp.dto.MonthlyStatementResponse;
 import io.skima.byteapp.dto.NotificationItem;
+import io.skima.byteapp.dto.PayoutResponse;
 import io.skima.byteapp.domain.RatingDirection;
 import io.skima.byteapp.dto.RatingCreateRequest;
 import io.skima.byteapp.dto.RatingResponse;
@@ -75,6 +76,8 @@ public class OwnerController {
     private final ComplianceService complianceService;
     private final WorkerStatsService workerStatsService;
     private final CafeStatsService cafeStatsService;
+    private final io.skima.byteapp.service.ShiftTemplateService shiftTemplateService;
+    private final io.skima.byteapp.service.S3Service s3Service;
     private final NotificationService notificationService;
     private final PayoutService payoutService;
     private final NoShowService noShowService;
@@ -106,6 +109,10 @@ public class OwnerController {
                 .brandKey(req.brandKey())
                 .latitude(req.latitude())
                 .longitude(req.longitude())
+                .openHours(req.openHours())
+                .seatCount(req.seatCount())
+                .phone(req.phone())
+                .description(req.description())
                 .build());
         return CafeResponse.from(saved, brandCatalog.findByKey(saved.getBrandKey()).orElse(null));
     }
@@ -121,6 +128,7 @@ public class OwnerController {
         if (req.latitude() != null || req.longitude() != null) {
             cafe.updateLocation(req.latitude(), req.longitude());
         }
+        cafe.updateProfile(req.openHours(), req.seatCount(), req.phone(), req.description());
         return CafeResponse.from(cafe, brandCatalog.findByKey(cafe.getBrandKey()).orElse(null));
     }
 
@@ -390,6 +398,15 @@ public class OwnerController {
         return cafeStatsService.computeForOwner(principal.getDomainUser());
     }
 
+    /** 점주 본인 매장 모든 payout — 정산 탭 데이터 소스 */
+    @GetMapping("/payouts")
+    @Transactional(readOnly = true)
+    public List<PayoutResponse> myPayouts(@AuthenticationPrincipal AuthUser principal) {
+        return payoutRepository.findAllByOwnerId(principal.getDomainUser().getId()).stream()
+                .map(PayoutResponse::from)
+                .toList();
+    }
+
     @GetMapping("/dashboard")
     @Transactional(readOnly = true)
     public OwnerDashboardResponse dashboard(@AuthenticationPrincipal AuthUser principal) {
@@ -443,6 +460,42 @@ public class OwnerController {
         return cafe;
     }
 
+    /** 매장 대표 사진 S3 업로드 — multipart file */
+    @PostMapping(value = "/cafes/{cafeId}/image", consumes = "multipart/form-data")
+    @Transactional
+    public Map<String, Object> uploadCafeImage(@AuthenticationPrincipal AuthUser principal,
+                                                @PathVariable Long cafeId,
+                                                @RequestParam("file") org.springframework.web.multipart.MultipartFile file) throws java.io.IOException {
+        if (!s3Service.isEnabled()) {
+            throw BusinessException.badRequest("이미지 업로드 서비스가 비활성 상태입니다 (S3 미설정)");
+        }
+        if (file == null || file.isEmpty()) {
+            throw BusinessException.badRequest("파일이 비어있습니다");
+        }
+        Cafe cafe = mustOwnCafe(principal, cafeId);
+        String old = cafe.getImageUrl();
+        String url = s3Service.upload(file, "cafes/cover");
+        cafe.setImageUrl(url);
+        s3Service.delete(old);
+        Map<String, Object> r = new HashMap<>();
+        r.put("ok", true);
+        r.put("imageUrl", url);
+        return r;
+    }
+
+    @DeleteMapping("/cafes/{cafeId}/image")
+    @Transactional
+    public Map<String, Object> deleteCafeImage(@AuthenticationPrincipal AuthUser principal,
+                                                 @PathVariable Long cafeId) {
+        Cafe cafe = mustOwnCafe(principal, cafeId);
+        String old = cafe.getImageUrl();
+        cafe.setImageUrl(null);
+        s3Service.delete(old);
+        Map<String, Object> r = new HashMap<>();
+        r.put("ok", true);
+        return r;
+    }
+
     /** 워커 N명이 이 매장을 단골로 등록했는지 — 시프트 등록 시 알림 발송 안내용 */
     @GetMapping("/cafes/{cafeId}/favoriting-count")
     public Map<String, Long> favoritingCount(@AuthenticationPrincipal AuthUser principal,
@@ -451,6 +504,71 @@ public class OwnerController {
         long count = favoriteService.workerIdsFavoriting(cafeId).size();
         Map<String, Long> result = new HashMap<>();
         result.put("count", count);
+        return result;
+    }
+
+    /* ========= 시프트 템플릿 (자동 반복 등록) ========= */
+
+    @GetMapping("/shift-templates")
+    public List<io.skima.byteapp.dto.ShiftTemplateResponse> myTemplates(@AuthenticationPrincipal AuthUser principal) {
+        return shiftTemplateService.myTemplates(principal.getDomainUser()).stream()
+                .map(io.skima.byteapp.dto.ShiftTemplateResponse::from)
+                .toList();
+    }
+
+    @PostMapping("/shift-templates")
+    public io.skima.byteapp.dto.ShiftTemplateResponse createTemplate(@AuthenticationPrincipal AuthUser principal,
+                                                                      @Valid @RequestBody io.skima.byteapp.dto.ShiftTemplateRequest req) {
+        return io.skima.byteapp.dto.ShiftTemplateResponse.from(
+                shiftTemplateService.create(principal.getDomainUser(), req));
+    }
+
+    @PostMapping("/shift-templates/{id}/active")
+    public io.skima.byteapp.dto.ShiftTemplateResponse setTemplateActive(@AuthenticationPrincipal AuthUser principal,
+                                                                         @PathVariable Long id,
+                                                                         @RequestParam boolean value) {
+        return io.skima.byteapp.dto.ShiftTemplateResponse.from(
+                shiftTemplateService.setActive(principal.getDomainUser(), id, value));
+    }
+
+    @DeleteMapping("/shift-templates/{id}")
+    public ResponseEntity<Void> deleteTemplate(@AuthenticationPrincipal AuthUser principal,
+                                                @PathVariable Long id) {
+        shiftTemplateService.delete(principal.getDomainUser(), id);
+        return ResponseEntity.noContent().build();
+    }
+
+    @PostMapping("/shift-templates/{id}/materialize")
+    public Map<String, Object> materializeTemplate(@AuthenticationPrincipal AuthUser principal,
+                                                    @PathVariable Long id,
+                                                    @RequestParam(defaultValue = "14") int days) {
+        int created = shiftTemplateService.materialize(principal.getDomainUser(), id, days);
+        Map<String, Object> r = new HashMap<>();
+        r.put("created", created);
+        return r;
+    }
+
+    /** 시프트 등록 전 같은 매장·시간 겹침 검증 — 등록 폼에서 호출 */
+    @GetMapping("/shifts/check-overlap")
+    public Map<String, Object> checkOverlap(@AuthenticationPrincipal AuthUser principal,
+                                             @RequestParam Long cafeId,
+                                             @RequestParam String startAt,
+                                             @RequestParam String endAt) {
+        mustOwnCafe(principal, cafeId);
+        java.time.LocalDateTime start = java.time.LocalDateTime.parse(startAt);
+        java.time.LocalDateTime end = java.time.LocalDateTime.parse(endAt);
+        List<io.skima.byteapp.domain.Shift> overlapping = shiftRepository.findOverlapping(cafeId, start, end);
+        Map<String, Object> result = new HashMap<>();
+        result.put("hasOverlap", !overlapping.isEmpty());
+        result.put("count", overlapping.size());
+        result.put("overlaps", overlapping.stream().map(s -> {
+            Map<String, Object> m = new HashMap<>();
+            m.put("id", s.getId());
+            m.put("startAt", s.getStartAt().toString());
+            m.put("endAt", s.getEndAt().toString());
+            m.put("status", s.getStatus().name());
+            return m;
+        }).toList());
         return result;
     }
 
