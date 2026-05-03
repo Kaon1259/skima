@@ -3,6 +3,7 @@ import { Tabs } from 'expo-router';
 import { Platform, View } from 'react-native';
 
 import { AuthGate } from '@/components/AuthGate';
+import BrandMark from '@/components/BrandMark';
 import HeaderLogout from '@/components/HeaderLogout';
 import { Icon } from '@/components/Icon';
 import NotificationBell from '@/components/NotificationBell';
@@ -20,6 +21,7 @@ export default function OwnerLayout() {
           headerTintColor: colors.text,
           headerTitleStyle: { fontWeight: '800', fontSize: 18 },
           headerShadowVisible: false,
+          headerLeft: () => <BrandMark />,
           headerRight: () => (
             <View style={{ flexDirection: 'row', alignItems: 'center' }}>
               <NotificationBell role="owner" />

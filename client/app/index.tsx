@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { Animated, Easing, Text, View } from 'react-native';
+import { Animated, Easing, Image, Text, View } from 'react-native';
 import { router } from 'expo-router';
 
 import { useAuth } from '@/lib/auth';
@@ -38,29 +38,23 @@ export default function IndexSplash() {
     <View
       style={{
         flex: 1,
-        backgroundColor: colors.primary,
+        backgroundColor: '#FFF7ED',
         alignItems: 'center',
         justifyContent: 'center',
       }}
     >
       <Animated.View style={{ opacity: fade, transform: [{ scale }], alignItems: 'center' }}>
-        <View
+        <Image
+          source={require('@/assets/images/icon.png')}
           style={{
-            width: 96,
-            height: 96,
-            borderRadius: 28,
-            backgroundColor: '#fff',
-            alignItems: 'center',
-            justifyContent: 'center',
-            marginBottom: 20,
+            width: 180,
+            height: 180,
+            borderRadius: 40,
+            marginBottom: 24,
           }}
-        >
-          <Text style={{ fontSize: 44 }}>⚡</Text>
-        </View>
-        <Text style={{ fontSize: 36, fontWeight: '900', color: '#fff', letterSpacing: -0.8 }}>
-          스키마 바이트
-        </Text>
-        <Text style={{ fontSize: 15, color: 'rgba(255,255,255,0.92)', marginTop: 8, fontWeight: '600' }}>
+          resizeMode="cover"
+        />
+        <Text style={{ fontSize: 16, color: colors.textMuted, fontWeight: '700' }}>
           1시간 매칭 · 30분 입금
         </Text>
       </Animated.View>
@@ -69,12 +63,12 @@ export default function IndexSplash() {
         style={{
           position: 'absolute',
           bottom: 40,
-          color: 'rgba(255,255,255,0.7)',
+          color: colors.textLight,
           fontSize: 12,
           fontWeight: '500',
         }}
       >
-        Skima Byte · 단기 카페 알바 매칭
+        단바 · 단기 알바 30분 매칭
       </Text>
     </View>
   );

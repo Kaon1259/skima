@@ -2,9 +2,9 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Alert, FlatList, Platform, Pressable, RefreshControl, ScrollView, Text, View } from 'react-native';
 import { router } from 'expo-router';
 import { Icon } from '@/components/Icon';
+import KakaoMapThumbnail from '@/components/KakaoMapThumbnail';
 import ShiftSkillBadges from '@/components/ShiftSkillBadges';
 import { TrustScoreBadge } from '@/components/TrustScoreBadge';
-import { WorkerHomeWidgets } from '@/components/WorkerHomeWidgets';
 import { WorkerOnboardingTutorial } from '@/components/WorkerOnboardingTutorial';
 import { api, ApiError } from '@/lib/api';
 import { Coords, distanceKm, getCurrentCoords } from '@/lib/geolocation';
@@ -38,7 +38,7 @@ function durationHours(startIso: string, endIso: string) {
   return Math.round((ms / (1000 * 60 * 60)) * 10) / 10;
 }
 
-type SortMode = 'time' | 'rating' | 'wage' | 'distance';
+type SortMode = 'recommend' | 'time' | 'rating' | 'wage' | 'distance';
 type TimeFilter = 'any' | 'morning' | 'afternoon' | 'evening' | 'night';
 type DayFilter = 'any' | 'today' | 'thisweek' | 'weekend';
 type WageFilter = 'any' | '12k' | '15k';
@@ -88,8 +88,9 @@ export default function WorkerShiftsScreen() {
   const [dayFilter, setDayFilter] = useState<DayFilter>('any');
   const [wageFilter, setWageFilter] = useState<WageFilter>('any');
   const [distanceFilter, setDistanceFilter] = useState<DistanceFilter>('any');
-  const [sortMode, setSortMode] = useState<SortMode>('time');
+  const [sortMode, setSortMode] = useState<SortMode>('recommend');
   const [filtersLoaded, setFiltersLoaded] = useState(false);
+  const [filtersExpanded, setFiltersExpanded] = useState(false);
 
   // 워커 현재 위치 (GPS, best-effort)
   const [myCoords, setMyCoords] = useState<Coords | null>(null);
@@ -205,6 +206,33 @@ export default function WorkerShiftsScreen() {
         return distanceKm(myCoords, { latitude: s.cafeLatitude, longitude: s.cafeLongitude });
       };
       xs.sort((a, b) => dist(a) - dist(b));
+    } else if (sortMode === 'recommend') {
+      const distOf = (s: WorkerShift): number | null => {
+        if (!myCoords || s.cafeLatitude == null || s.cafeLongitude == null) return null;
+        return distanceKm(myCoords, { latitude: s.cafeLatitude, longitude: s.cafeLongitude });
+      };
+      const score = (s: WorkerShift): number => {
+        let total = 0;
+        // 매장 신뢰도 (0~100, 데이터 없으면 50 중립)
+        total += (s.cafeTrustScore ?? 50) * 0.25;
+        // 별점 (5점 만점 → 100점 환산, 신규 매장 50 중립)
+        total += (s.cafeAvgRating != null ? s.cafeAvgRating * 20 : 50) * 0.20;
+        // 노쇼율 (1-rate, 데이터 없으면 0.9 낙관 중립)
+        total += ((1 - (s.cafeNoShowRate ?? 0.1)) * 100) * 0.10;
+        // 거리 (0km=100, 30km=0 — GPS 없으면 50 중립)
+        const d = distOf(s);
+        const distScore = d == null ? 50 : Math.max(0, 100 - (d / 30) * 100);
+        total += distScore * 0.15;
+        // 시급 (8천원=0, 2만원=100)
+        const wageScore = Math.min(100, Math.max(0, ((s.hourlyWage - 8000) / 12000) * 100));
+        total += wageScore * 0.10;
+        // 단골 매장 가산 (강력)
+        if (favIds.has(s.cafeId) || s.isFavoriteCafe) total += 15;
+        // 능력 적합 가산
+        if (isFitForMe(s)) total += 5;
+        return total;
+      };
+      xs.sort((a, b) => score(b) - score(a));
     } else {
       xs.sort((a, b) => (a.startAt ?? '').localeCompare(b.startAt ?? ''));
     }
@@ -336,9 +364,6 @@ export default function WorkerShiftsScreen() {
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={load} tintColor={colors.primary} />}
       ListHeaderComponent={
         <View style={{ marginBottom: spacing.lg }}>
-          {/* 워커 홈 위젯들 — 오늘 매칭/다음 매칭/이번주 받을 돈/평점·단골/단골 매장 새 시프트 */}
-          <WorkerHomeWidgets />
-
           <Text style={styles.h2}>지금 일할 수 있는 시프트</Text>
           <Text style={[styles.subtitle, { marginTop: 4 }]}>1탭 지원 · 면접 없음 · 30분 내 입금</Text>
 
@@ -406,9 +431,14 @@ export default function WorkerShiftsScreen() {
 
           {/* 정렬 칩 */}
           <View style={{ marginTop: 14, flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
-            {(['time', 'rating', 'wage', ...(myCoords ? ['distance' as SortMode] : [])] as SortMode[]).map((m) => {
+            {(['recommend', 'time', 'rating', 'wage', ...(myCoords ? ['distance' as SortMode] : [])] as SortMode[]).map((m) => {
               const active = sortMode === m;
-              const label = m === 'time' ? '⏰ 시작순' : m === 'rating' ? '★ 별점순' : m === 'wage' ? '💰 시급순' : '📍 가까운순';
+              const label =
+                m === 'recommend' ? '🎯 추천순'
+                : m === 'time' ? '⏰ 시작순'
+                : m === 'rating' ? '★ 별점순'
+                : m === 'wage' ? '💰 시급순'
+                : '📍 가까운순';
               return (
                 <Pressable
                   key={m}
@@ -433,103 +463,55 @@ export default function WorkerShiftsScreen() {
             })}
           </View>
 
-          {/* 거리 필터 (GPS 활성 시만 노출) */}
-          {myCoords ? (
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={{ gap: 6, paddingRight: spacing.lg }}
-              style={{ marginTop: 8 }}
-            >
-              {(['any', '5', '10', '30'] as DistanceFilter[]).map((d) => {
-                const active = distanceFilter === d;
-                const label = d === 'any' ? '📍 전체' : `📍 ${d}km 이내`;
-                return (
-                  <FilterChip
-                    key={d}
-                    label={label}
-                    active={active}
-                    onPress={() => setDistanceFilter(d)}
-                    accent={colors.primary}
-                  />
-                );
-              })}
-            </ScrollView>
-          ) : null}
-
-          {/* 빠른 필터 칩 row 1 — 시간대 */}
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={{ gap: 6, paddingRight: spacing.lg }}
-            style={{ marginTop: 8 }}
-          >
-            {(['any', 'morning', 'afternoon', 'evening', 'night'] as TimeFilter[]).map((t) => {
-              const active = timeFilter === t;
-              const meta = TIME_RANGES[t];
-              return (
-                <FilterChip
-                  key={t}
-                  label={`${meta.emoji} ${meta.label}`}
-                  active={active}
-                  onPress={() => setTimeFilter(t)}
-                  accent={colors.info}
-                />
-              );
-            })}
-          </ScrollView>
-
-          {/* 빠른 필터 칩 row 2 — 요일 + 시급 */}
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={{ gap: 6, paddingRight: spacing.lg }}
-            style={{ marginTop: 6 }}
-          >
-            {(['any', 'today', 'thisweek', 'weekend'] as DayFilter[]).map((d) => {
-              const active = dayFilter === d;
-              const meta = DAY_LABEL[d];
-              return (
-                <FilterChip
-                  key={d}
-                  label={`${meta.emoji} ${meta.label}`}
-                  active={active}
-                  onPress={() => setDayFilter(d)}
-                  accent={colors.warn}
-                />
-              );
-            })}
-            {(['any', '12k', '15k'] as WageFilter[]).map((w) => {
-              if (w === 'any') return null;
-              const active = wageFilter === w;
-              return (
-                <FilterChip
-                  key={w}
-                  label={`💰 ${WAGE_LABEL[w]}`}
-                  active={active}
-                  onPress={() => setWageFilter(active ? 'any' : w)}
-                  accent={colors.success}
-                />
-              );
-            })}
-          </ScrollView>
-
-          {/* 토글 row — 단골만 / 능력 매칭만 / 초기화 */}
+          {/* 토글 row — 단골만 / 능력 매칭만 / 필터 펼치기 / 초기화 (한 줄에 핵심만) */}
           <View style={{ marginTop: 8, flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
             <FilterChip
-              label={favOnly ? '✓ ⭐ 단골만' : '⭐ 단골 매장만'}
+              label={favOnly ? '✓ ⭐ 단골만' : '⭐ 단골만'}
               active={favOnly}
               onPress={() => setFavOnly((v) => !v)}
               accent={colors.warn}
             />
             {myLevelRank != null || myRolesSet.size > 0 || myCertsSet.size > 0 ? (
               <FilterChip
-                label={fitOnly ? '✓ 내 능력 매칭' : '🎯 내 능력 매칭'}
+                label={fitOnly ? '✓ 능력 매칭' : '🎯 능력 매칭'}
                 active={fitOnly}
                 onPress={() => setFitOnly((v) => !v)}
                 accent={colors.success}
               />
             ) : null}
+            {/* 펼치기 버튼 — 활성 필터 수 표시 */}
+            {(() => {
+              const advCount = (timeFilter !== 'any' ? 1 : 0)
+                + (dayFilter !== 'any' ? 1 : 0)
+                + (wageFilter !== 'any' ? 1 : 0)
+                + (distanceFilter !== 'any' ? 1 : 0);
+              return (
+                <Pressable
+                  onPress={() => setFiltersExpanded((v) => !v)}
+                  style={({ pressed }) => [
+                    {
+                      paddingHorizontal: 10,
+                      paddingVertical: 6,
+                      borderRadius: radius.pill,
+                      backgroundColor: advCount > 0 ? colors.primarySoft : colors.surface,
+                      borderWidth: 1,
+                      borderColor: advCount > 0 ? colors.primary : colors.border,
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      gap: 4,
+                    },
+                    pressed && { opacity: 0.85 },
+                  ]}
+                >
+                  <Text style={{ fontSize: 11, fontWeight: '800', color: advCount > 0 ? colors.primaryDark : colors.text }}>
+                    🔍 필터{advCount > 0 ? ` ${advCount}` : ''}
+                  </Text>
+                  <Text style={{ fontSize: 10, color: advCount > 0 ? colors.primaryDark : colors.textMuted }}>
+                    {filtersExpanded ? '▴' : '▾'}
+                  </Text>
+                </Pressable>
+              );
+            })()}
             {activeFilterCount > 0 ? (
               <Pressable
                 onPress={resetFilters}
@@ -546,11 +528,93 @@ export default function WorkerShiftsScreen() {
                 ]}
               >
                 <Text style={{ fontSize: 11, fontWeight: '800', color: colors.danger }}>
-                  ✕ 초기화 ({activeFilterCount})
+                  ✕ 초기화
                 </Text>
               </Pressable>
             ) : null}
           </View>
+
+          {/* 펼친 필터들 — 거리·시간대·요일·시급 (조건부 렌더) */}
+          {filtersExpanded ? (
+            <View style={{ marginTop: 8 }}>
+              {myCoords ? (
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={{ gap: 6, paddingRight: spacing.lg }}
+                >
+                  {(['any', '5', '10', '30'] as DistanceFilter[]).map((d) => {
+                    const active = distanceFilter === d;
+                    const label = d === 'any' ? '📍 거리 전체' : `📍 ${d}km 이내`;
+                    return (
+                      <FilterChip
+                        key={d}
+                        label={label}
+                        active={active}
+                        onPress={() => setDistanceFilter(d)}
+                        accent={colors.primary}
+                      />
+                    );
+                  })}
+                </ScrollView>
+              ) : null}
+
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={{ gap: 6, paddingRight: spacing.lg }}
+                style={{ marginTop: 6 }}
+              >
+                {(['any', 'morning', 'afternoon', 'evening', 'night'] as TimeFilter[]).map((t) => {
+                  const active = timeFilter === t;
+                  const meta = TIME_RANGES[t];
+                  return (
+                    <FilterChip
+                      key={t}
+                      label={`${meta.emoji} ${meta.label}`}
+                      active={active}
+                      onPress={() => setTimeFilter(t)}
+                      accent={colors.info}
+                    />
+                  );
+                })}
+              </ScrollView>
+
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={{ gap: 6, paddingRight: spacing.lg }}
+                style={{ marginTop: 6 }}
+              >
+                {(['any', 'today', 'thisweek', 'weekend'] as DayFilter[]).map((d) => {
+                  const active = dayFilter === d;
+                  const meta = DAY_LABEL[d];
+                  return (
+                    <FilterChip
+                      key={d}
+                      label={`${meta.emoji} ${meta.label}`}
+                      active={active}
+                      onPress={() => setDayFilter(d)}
+                      accent={colors.warn}
+                    />
+                  );
+                })}
+                {(['any', '12k', '15k'] as WageFilter[]).map((w) => {
+                  if (w === 'any') return null;
+                  const active = wageFilter === w;
+                  return (
+                    <FilterChip
+                      key={w}
+                      label={`💰 ${WAGE_LABEL[w]}`}
+                      active={active}
+                      onPress={() => setWageFilter(active ? 'any' : w)}
+                      accent={colors.success}
+                    />
+                  );
+                })}
+              </ScrollView>
+            </View>
+          ) : null}
 
           <Text style={{ fontSize: 11, color: colors.textMuted, marginTop: 8 }}>
             {visibleShifts.length}건 표시{activeFilterCount > 0 && shifts.length !== visibleShifts.length
@@ -663,135 +727,114 @@ export default function WorkerShiftsScreen() {
           <View
             style={[
               styles.card,
+              { padding: 14, marginBottom: 10 },
               alreadyApplied && { borderWidth: 1.5, borderColor: colors.primary },
-              wasRejected && { opacity: 0.6 },
+              wasRejected && { opacity: 0.55 },
               isFavCafe && {
-                borderLeftWidth: 4,
+                borderLeftWidth: 3,
                 borderLeftColor: colors.warn,
                 backgroundColor: colors.warnSoft,
               },
             ]}
           >
-            <View style={{ flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between' }}>
-              <View style={{ flex: 1, marginRight: 8, flexDirection: 'row', gap: 10 }}>
-                {/* 브랜드 아바타 */}
-                <View
-                  style={{
-                    width: 38,
-                    height: 38,
-                    borderRadius: 10,
-                    backgroundColor: item.brandColor ?? colors.primary,
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                  }}
-                >
-                  <Text style={{ color: '#fff', fontWeight: '900', fontSize: 11 }}>
-                    {item.brandLetter ?? '☕'}
-                  </Text>
-                </View>
-                <Pressable
-                  style={({ pressed }) => [{ flex: 1 }, pressed && { opacity: 0.7 }]}
-                  onPress={() => router.push(`/cafe/${item.cafeId}` as never)}
-                >
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                    <Text style={styles.title}>{item.cafeName}</Text>
-                    {isFavCafe ? (
-                      <View
-                        style={{
-                          paddingHorizontal: 6,
-                          paddingVertical: 1,
-                          borderRadius: radius.pill,
-                          backgroundColor: colors.warn,
-                        }}
-                      >
-                        <Text style={{ fontSize: 10, fontWeight: '900', color: '#fff' }}>⭐ 단골</Text>
-                      </View>
-                    ) : null}
-                    <Icon name="chevron-forward" size={14} color={colors.textLight} />
-                    {item.cafeAvgRating != null ? (
-                      <Text style={{ fontSize: 12, fontWeight: '800', color: colors.warn }}>
-                        ★ {item.cafeAvgRating.toFixed(1)}
-                        <Text style={{ color: colors.textMuted, fontWeight: '600' }}>
-                          {' '}({item.cafeRatingsCount ?? 0})
-                        </Text>
-                      </Text>
-                    ) : (
-                      <Text style={{ fontSize: 11, color: colors.textLight, fontWeight: '600' }}>★ 신규</Text>
-                    )}
-                    {/* 매장 신뢰도 점수 — null 이면 숨김 (데이터 부족) */}
-                    {item.cafeTrustScore != null ? (
-                      <TrustScoreBadge score={item.cafeTrustScore} size="xs" showLabel={false} />
-                    ) : null}
-                    {item.cafeNoShowRate != null && item.cafeNoShowRate > 0 ? (
-                      <View
-                        style={{
-                          paddingHorizontal: 6,
-                          paddingVertical: 1,
-                          borderRadius: radius.pill,
-                          backgroundColor: colors.dangerSoft,
-                        }}
-                      >
-                        <Text style={{ fontSize: 10, fontWeight: '800', color: colors.danger }}>
-                          노쇼 {fmtPercent(item.cafeNoShowRate)}
-                        </Text>
-                      </View>
-                    ) : null}
-                  </View>
-                  <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 4, marginTop: 2 }}>
-                    {item.cafeType ? (
-                      <Text style={[styles.bodyMuted, { fontSize: 11, fontWeight: '700' }]}>
-                        {cafeTypeLabel(item.cafeType)}
-                      </Text>
-                    ) : null}
-                    {dKm != null ? (
-                      <Text style={[styles.bodyMuted, { fontSize: 11, fontWeight: '700', color: colors.primary }]}>
-                        · 📍 {dKm < 1 ? `${Math.round(dKm * 1000)}m` : `${dKm.toFixed(1)}km`}
-                      </Text>
-                    ) : null}
-                    <Text style={[styles.bodyMuted, { fontSize: 11 }]} numberOfLines={1}>
-                      · {item.cafeAddress}
-                    </Text>
-                  </View>
-                </Pressable>
+            {/* 헤더: 아바타 + 매장 정보 + 상태 */}
+            <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 10 }}>
+              <View
+                style={{
+                  width: 32,
+                  height: 32,
+                  borderRadius: 9,
+                  backgroundColor: item.brandColor ?? colors.primary,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                <Text style={{ color: '#fff', fontWeight: '900', fontSize: 12 }}>
+                  {item.brandLetter ?? '☕'}
+                </Text>
               </View>
+              <Pressable
+                style={({ pressed }) => [{ flex: 1, marginRight: 6 }, pressed && { opacity: 0.7 }]}
+                onPress={() => router.push(`/cafe/${item.cafeId}` as never)}
+              >
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, flexWrap: 'wrap' }}>
+                  <Text style={[styles.title, { fontSize: 15 }]} numberOfLines={1}>{item.cafeName}</Text>
+                  {isFavCafe ? (
+                    <Text style={{ fontSize: 11, fontWeight: '800', color: colors.warn }}>⭐</Text>
+                  ) : null}
+                  {item.cafeAvgRating != null ? (
+                    <Text style={{ fontSize: 12, fontWeight: '700', color: colors.warn }}>
+                      ★ {item.cafeAvgRating.toFixed(1)}
+                      <Text style={{ color: colors.textLight, fontWeight: '500' }}>
+                        {' '}({item.cafeRatingsCount ?? 0})
+                      </Text>
+                    </Text>
+                  ) : (
+                    <Text style={{ fontSize: 11, color: colors.textLight, fontWeight: '500' }}>★ 신규</Text>
+                  )}
+                  {item.cafeTrustScore != null ? (
+                    <TrustScoreBadge score={item.cafeTrustScore} size="xs" showLabel={false} />
+                  ) : null}
+                  {item.cafeNoShowRate != null && item.cafeNoShowRate > 0 ? (
+                    <Text style={{ fontSize: 11, fontWeight: '700', color: colors.danger }}>
+                      노쇼 {fmtPercent(item.cafeNoShowRate)}
+                    </Text>
+                  ) : null}
+                </View>
+                <Text style={[styles.bodyMuted, { fontSize: 11, marginTop: 2 }]} numberOfLines={1}>
+                  {item.cafeType ? `${cafeTypeLabel(item.cafeType)} · ` : ''}
+                  {dKm != null ? `📍 ${dKm < 1 ? `${Math.round(dKm * 1000)}m` : `${dKm.toFixed(1)}km`} · ` : ''}
+                  {item.cafeAddress}
+                </Text>
+              </Pressable>
               <StatusPill status={myStatus} />
             </View>
 
-            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 12 }}>
-              <View style={styles.chip}>
-                <Text style={styles.chipText}>🕐 {fmtDateTime(item.startAt)} 시작</Text>
-              </View>
-              <View style={styles.chip}>
-                <Text style={styles.chipText}>{dur}시간</Text>
-              </View>
-              <View style={[styles.chip, { backgroundColor: colors.primarySoft, borderColor: colors.primarySoft }]}>
-                <Text style={[styles.chipText, { color: colors.primaryDark }]}>1명 모집</Text>
-              </View>
-            </View>
-
+            {/* 핵심 정보 한 줄: 시간/근무/모집 + 우측 가격 */}
             <View
               style={{
-                marginTop: 14,
-                marginBottom: 14,
-                padding: 14,
-                borderRadius: radius.md,
-                backgroundColor: colors.surfaceAlt,
+                flexDirection: 'row',
+                alignItems: 'center',
+                marginTop: 12,
+                paddingTop: 12,
+                borderTopWidth: 1,
+                borderTopColor: colors.border,
               }}
             >
-              <Text style={{ fontSize: 12, color: colors.textMuted, fontWeight: '600' }}>예상 보수</Text>
-              <View style={{ flexDirection: 'row', alignItems: 'baseline', marginTop: 4 }}>
-                <Text style={{ fontSize: 28, fontWeight: '900', color: colors.primary, letterSpacing: -0.5 }}>
+              <View style={{ flex: 1 }}>
+                <Text style={{ fontSize: 13, fontWeight: '700', color: colors.text, letterSpacing: -0.3 }}>
+                  🕐 {fmtDateTime(item.startAt)}
+                </Text>
+                <Text style={{ fontSize: 11, color: colors.textMuted, marginTop: 2 }}>
+                  {dur}시간 근무 · 1명 모집
+                </Text>
+              </View>
+              <View style={{ alignItems: 'flex-end' }}>
+                <Text
+                  style={{
+                    fontSize: 20,
+                    fontWeight: '900',
+                    color: colors.primary,
+                    letterSpacing: -0.6,
+                    lineHeight: 24,
+                  }}
+                >
                   {fmtKRW(totalEst)}
                 </Text>
-                <Text style={{ fontSize: 12, color: colors.textMuted, marginLeft: 8 }}>
+                <Text style={{ fontSize: 10, color: colors.textMuted, marginTop: 1 }}>
                   시급 {fmtKRW(item.hourlyWage)}
                 </Text>
               </View>
-              {item.description ? (
-                <Text style={[styles.bodyMuted, { marginTop: 6 }]}>{item.description}</Text>
-              ) : null}
             </View>
 
+            {/* 설명 (있을 때만) */}
+            {item.description ? (
+              <Text style={[styles.bodyMuted, { fontSize: 12, marginTop: 8 }]} numberOfLines={2}>
+                {item.description}
+              </Text>
+            ) : null}
+
+            {/* 능력 배지 */}
             <ShiftSkillBadges
               jobRole={item.jobRole}
               minSkill={item.minSkill}
@@ -799,14 +842,30 @@ export default function WorkerShiftsScreen() {
               myLevel={me?.selfReportedLevel as SkillLevel | null | undefined}
               myRoles={me?.capableRoles as JobRole[] | undefined}
               myCertifications={me?.certifications}
+              compact
             />
 
-            <ApplyButton
-              status={myStatus}
-              busy={busyId === item.id}
-              onApply={() => apply(item.id)}
-              onWithdraw={() => withdraw(item.id)}
-            />
+            {/* 지도 — 작게 (88px), 좌표 있을 때만 */}
+            {item.cafeLatitude != null && item.cafeLongitude != null ? (
+              <View style={{ marginTop: 10 }}>
+                <KakaoMapThumbnail
+                  latitude={item.cafeLatitude}
+                  longitude={item.cafeLongitude}
+                  placeName={item.cafeName}
+                  address={item.cafeAddress}
+                  height={88}
+                />
+              </View>
+            ) : null}
+
+            <View style={{ marginTop: 12 }}>
+              <ApplyButton
+                status={myStatus}
+                busy={busyId === item.id}
+                onApply={() => apply(item.id)}
+                onWithdraw={() => withdraw(item.id)}
+              />
+            </View>
           </View>
         );
       }}
@@ -940,14 +999,14 @@ function ApplyButton({
     <Pressable
       style={({ pressed }) => [
         styles.buttonPrimary,
-        { flexDirection: 'row', gap: 6 },
+        { flexDirection: 'row', gap: 6, paddingVertical: 11 },
         (busy || pressed) && { opacity: 0.85 },
       ]}
       onPress={onApply}
       disabled={busy}
     >
-      <Icon name="flash" size={16} color="#fff" />
-      <Text style={styles.buttonPrimaryText}>{busy ? '지원 중...' : '1탭 지원'}</Text>
+      <Icon name="flash" size={15} color="#fff" />
+      <Text style={[styles.buttonPrimaryText, { fontSize: 14 }]}>{busy ? '지원 중...' : '1탭 지원'}</Text>
     </Pressable>
   );
 }

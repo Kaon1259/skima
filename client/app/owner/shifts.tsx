@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from 'react';
-import { Alert, FlatList, Platform, Pressable, RefreshControl, ScrollView, Text, TextInput, View } from 'react-native';
+import { Alert, FlatList, Platform, Pressable, RefreshControl, Text, TextInput, View } from 'react-native';
 import { router } from 'expo-router';
 
 import { EmptyState } from '@/components/EmptyState';
@@ -8,11 +8,9 @@ import { RatingModal, blurFocusedForModal } from '@/components/RatingModal';
 import ShiftSkillBadges from '@/components/ShiftSkillBadges';
 import { SkeletonList } from '@/components/Skeleton';
 import { api } from '@/lib/api';
-import { usePinnedCafes } from '@/lib/pinnedCafes';
 import { useFocusPolling } from '@/lib/useFocusPolling';
 import {
   Cafe,
-  CafeStats,
   OwnerDashboard,
   OwnerShift,
   fmtDateTime,
@@ -25,7 +23,6 @@ import { colors, radius, spacing, statusVisual, styles } from '@/lib/theme';
 export default function OwnerShiftsScreen() {
   const [shifts, setShifts] = useState<OwnerShift[]>([]);
   const [dash, setDash] = useState<OwnerDashboard | null>(null);
-  const [cafeStats, setCafeStats] = useState<CafeStats[]>([]);
   const [cafes, setCafes] = useState<Cafe[]>([]);
   const [refreshing, setRefreshing] = useState(false);
   const [initialLoaded, setInitialLoaded] = useState(false);
@@ -33,11 +30,10 @@ export default function OwnerShiftsScreen() {
   const [ratingTarget, setRatingTarget] = useState<{ matchId: number; workerName: string } | null>(null);
   const [filter, setFilter] = useState<'ALL' | 'OPEN' | 'MATCHED' | 'IN_PROGRESS' | 'COMPLETED'>('ALL');
   const [query, setQuery] = useState('');
-  const { pinned: pinnedCafes, toggle: togglePinCafe } = usePinnedCafes();
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return shifts.filter((s) => {
+    const xs = shifts.filter((s) => {
       if (filter === 'OPEN' && s.status !== 'OPEN') return false;
       if (filter === 'MATCHED' && s.status !== 'MATCHED') return false;
       if (filter === 'IN_PROGRESS' && s.status !== 'IN_PROGRESS') return false;
@@ -54,25 +50,40 @@ export default function OwnerShiftsScreen() {
         (s.matchedWorkerName ?? '').toLowerCase().includes(q)
       );
     });
+    // 긴급도 정렬 — 점주가 "지금 봐야 할 것" 위로
+    // 1. OPEN + 지원자 있음 (수락/거절 결정 필요)
+    // 2. IN_PROGRESS (근무 중 — 채팅·체크아웃 모니터링)
+    // 3. MATCHED (시작 대기)
+    // 4. COMPLETED + 평가/정산 대기 (CHECKED_OUT + ratingScore null)
+    // 5. OPEN + 지원자 없음
+    // 6. COMPLETED 평가 끝 / CANCELED / etc
+    function urgency(s: OwnerShift): number {
+      if (s.status === 'OPEN' && (s.pendingApplicationsCount ?? 0) > 0) return 1;
+      if (s.status === 'IN_PROGRESS') return 2;
+      if (s.status === 'MATCHED') return 3;
+      if (s.status === 'COMPLETED' && s.matchStatus === 'CHECKED_OUT' && s.ratingScore == null) return 4;
+      if (s.status === 'OPEN') return 5;
+      if (s.status === 'COMPLETED') return 6;
+      return 7;
+    }
+    return [...xs].sort((a, b) => {
+      const u = urgency(a) - urgency(b);
+      if (u !== 0) return u;
+      // 같은 긴급도 안에서는 시작 시각 가까운 것 먼저
+      return (a.startAt ?? '').localeCompare(b.startAt ?? '');
+    });
   }, [shifts, filter, query]);
-
-  const needsRatingCount = useMemo(
-    () => shifts.filter((s) => s.status === 'COMPLETED' && s.matchStatus === 'CHECKED_OUT' && s.ratingScore == null).length,
-    [shifts],
-  );
 
   const load = useCallback(async () => {
     setRefreshing(true);
     try {
-      const [shiftData, dashData, byCafe, myCafes] = await Promise.all([
+      const [shiftData, dashData, myCafes] = await Promise.all([
         api<OwnerShift[]>('/api/owner/shifts'),
         api<OwnerDashboard>('/api/owner/dashboard'),
-        api<CafeStats[]>('/api/owner/dashboard/by-cafe'),
         api<Cafe[]>('/api/owner/cafes').catch(() => [] as Cafe[]),
       ]);
       setShifts(shiftData);
       setDash(dashData);
-      setCafeStats(byCafe);
       setCafes(myCafes);
     } catch (e) {
       const msg = (e as Error).message;
@@ -158,29 +169,37 @@ export default function OwnerShiftsScreen() {
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={load} tintColor={colors.primary} />}
       ListHeaderComponent={
         <View>
-          {/* 신규 점주 (매장 1 이하 AND 시프트 1 이하) — OnboardingSteps 노출 */}
-          {initialLoaded && cafes.length <= 1 && shifts.length <= 1 ? (
+          {/* 매장 0개 — OnboardingSteps 풀 노출 (시프트 등록 단계까지 안내) */}
+          {initialLoaded && cafes.length === 0 ? (
             <OnboardingSteps cafesCount={cafes.length} shiftsCount={shifts.length} />
           ) : null}
-          {/* 활성 점주 (매장 2+ 또는 시프트 2+) — 위젯/카드/필터 노출 */}
-          {(cafes.length >= 2 || shifts.length >= 2) ? (
+          {/* 매장 ≥1 + 시프트 ≥1 — 대시보드·검색·빠른진입 (시프트 0건이면 헤더 비우고 CTA만 노출) */}
+          {initialLoaded && cafes.length >= 1 && shifts.length >= 1 ? (
             <>
-              <DashboardHeader dash={dash} shifts={shifts} />
-              <TodayWidgets shifts={shifts} />
-              <CafeStatsRow stats={cafeStats} pinned={pinnedCafes} onTogglePin={togglePinCafe} />
-            </>
-          ) : null}
-          {/* 활성 점주만 필터·검색·빠른진입 표시 */}
-          {(cafes.length >= 2 || shifts.length >= 2) ? (
-            <>
-          {/* 필터 + 검색 — 카드 4개와 1:1 매핑 */}
-          <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
-            <FilterChip label="전체" active={filter === 'ALL'} onPress={() => setFilter('ALL')} />
-            <FilterChip label="모집중" active={filter === 'OPEN'} onPress={() => setFilter('OPEN')} />
-            <FilterChip label="매칭완료" active={filter === 'MATCHED'} onPress={() => setFilter('MATCHED')} />
-            <FilterChip label="근무중" active={filter === 'IN_PROGRESS'} onPress={() => setFilter('IN_PROGRESS')} />
-            <FilterChip label="완료" active={filter === 'COMPLETED'} onPress={() => setFilter('COMPLETED')} count={needsRatingCount} />
-          </View>
+              <DashboardHeader dash={dash} shifts={shifts} filter={filter} onFilterChange={setFilter} />
+
+              {filter !== 'ALL' ? (
+                <Pressable
+                  onPress={() => setFilter('ALL')}
+                  style={({ pressed }) => [
+                    {
+                      alignSelf: 'flex-start',
+                      paddingHorizontal: 10,
+                      paddingVertical: 4,
+                      borderRadius: radius.pill,
+                      backgroundColor: colors.dangerSoft,
+                      borderWidth: 1,
+                      borderColor: colors.danger,
+                      marginBottom: 10,
+                    },
+                    pressed && { opacity: 0.85 },
+                  ]}
+                >
+                  <Text style={{ fontSize: 11, fontWeight: '800', color: colors.danger }}>
+                    ✕ 필터 해제 (전체 보기)
+                  </Text>
+                </Pressable>
+              ) : null}
           <View style={{ position: 'relative', marginBottom: 16 }}>
             <TextInput
               value={query}
@@ -191,77 +210,12 @@ export default function OwnerShiftsScreen() {
             />
             <Text style={{ position: 'absolute', left: 14, top: 14, fontSize: 16 }}>🔍</Text>
           </View>
-          {/* 빠른 진입 — 히스토리 / 워커 풀 */}
-          <View style={{ flexDirection: 'row', gap: 8, marginBottom: 16 }}>
-            <Pressable
-              onPress={() => router.push('/owner/history')}
-              style={({ pressed }) => [
-                {
-                  flex: 1,
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: 6,
-                  paddingVertical: 10,
-                  borderRadius: radius.md,
-                  borderWidth: 1,
-                  borderColor: colors.border,
-                  backgroundColor: colors.surface,
-                },
-                pressed && { opacity: 0.7 },
-              ]}
-            >
-              <Text style={{ fontSize: 14 }}>📚</Text>
-              <Text style={{ fontSize: 12, fontWeight: '700', color: colors.text }}>시프트 히스토리</Text>
-            </Pressable>
-            <Pressable
-              onPress={() => router.push('/owner/worker-pool')}
-              style={({ pressed }) => [
-                {
-                  flex: 1,
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: 6,
-                  paddingVertical: 10,
-                  borderRadius: radius.md,
-                  borderWidth: 1,
-                  borderColor: colors.border,
-                  backgroundColor: colors.surface,
-                },
-                pressed && { opacity: 0.7 },
-              ]}
-            >
-              <Text style={{ fontSize: 14 }}>👥</Text>
-              <Text style={{ fontSize: 12, fontWeight: '700', color: colors.text }}>워커 풀</Text>
-            </Pressable>
-            <Pressable
-              onPress={() => router.push('/owner/shift-templates')}
-              style={({ pressed }) => [
-                {
-                  flex: 1,
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: 6,
-                  paddingVertical: 10,
-                  borderRadius: radius.md,
-                  borderWidth: 1,
-                  borderColor: colors.border,
-                  backgroundColor: colors.surface,
-                },
-                pressed && { opacity: 0.7 },
-              ]}
-            >
-              <Text style={{ fontSize: 14 }}>🗓️</Text>
-              <Text style={{ fontSize: 12, fontWeight: '700', color: colors.text }}>템플릿</Text>
-            </Pressable>
+          {/* 빠른 진입 — 세로 레이아웃 (아이콘 위 / 라벨 아래) 균등 정렬 */}
+          <View style={{ flexDirection: 'row', gap: 10, marginBottom: 16 }}>
+            <QuickLink emoji="📚" label="히스토리" sub="지난 시프트" onPress={() => router.push('/owner/history')} />
+            <QuickLink emoji="👥" label="워커 풀" sub="단골 워커" onPress={() => router.push('/owner/worker-pool')} />
+            <QuickLink emoji="🗓️" label="템플릿" sub="반복 시프트" onPress={() => router.push('/owner/shift-templates')} />
           </View>
-          {filtered.length === 0 && shifts.length > 0 ? (
-            <View style={{ paddingVertical: 24, alignItems: 'center' }}>
-              <Text style={styles.bodyMuted}>조건에 맞는 시프트가 없어요</Text>
-            </View>
-          ) : null}
             </>
           ) : null}
         </View>
@@ -269,6 +223,57 @@ export default function OwnerShiftsScreen() {
       ListEmptyComponent={
         !initialLoaded ? (
           <SkeletonList count={3} />
+        ) : cafes.length >= 1 && shifts.length === 0 ? (
+          // 매장은 있지만 시프트 0건 — 큰 CTA
+          <View style={{ paddingVertical: 32, paddingHorizontal: spacing.lg, alignItems: 'center' }}>
+            <Text style={{ fontSize: 56, marginBottom: 12 }}>📋</Text>
+            <Text style={{ fontSize: 16, fontWeight: '900', color: colors.text, marginBottom: 6 }}>
+              아직 등록된 시프트가 없어요
+            </Text>
+            <Text style={{ fontSize: 13, color: colors.textMuted, textAlign: 'center', marginBottom: 20 }}>
+              시급·시간을 입력하면 1시간 안에 워커가 매칭돼요{'\n'}
+              매칭된 시프트는 정산 완료까지 첫 화면에 계속 노출됩니다
+            </Text>
+            <Pressable
+              onPress={() => router.push('/owner/new-shift')}
+              style={({ pressed }) => [
+                {
+                  paddingVertical: 14,
+                  paddingHorizontal: 28,
+                  borderRadius: radius.md,
+                  backgroundColor: colors.primary,
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  gap: 8,
+                },
+                pressed && { opacity: 0.85 },
+              ]}
+            >
+              <Text style={{ fontSize: 18 }}>⚡</Text>
+              <Text style={{ fontSize: 15, fontWeight: '800', color: '#fff' }}>
+                첫 시프트 등록하기
+              </Text>
+            </Pressable>
+          </View>
+        ) : shifts.length > 0 ? (
+          // 시프트는 있는데 필터·검색 결과 없음
+          <View style={{ paddingVertical: 24, alignItems: 'center' }}>
+            <Text style={{ fontSize: 32, marginBottom: 8 }}>🔍</Text>
+            <Text style={styles.bodyMuted}>조건에 맞는 시프트가 없어요</Text>
+            {filter !== 'ALL' || query ? (
+              <Pressable
+                onPress={() => { setFilter('ALL'); setQuery(''); }}
+                style={({ pressed }) => [
+                  { marginTop: 12, paddingHorizontal: 14, paddingVertical: 8 },
+                  pressed && { opacity: 0.7 },
+                ]}
+              >
+                <Text style={{ fontSize: 12, fontWeight: '700', color: colors.primary }}>
+                  필터·검색 해제
+                </Text>
+              </Pressable>
+            ) : null}
+          </View>
         ) : null
       }
       renderItem={({ item }) => (
@@ -501,134 +506,181 @@ function FilterChip({ label, active, onPress, count }: { label: string; active: 
   );
 }
 
-function DashboardHeader({ dash, shifts }: { dash: OwnerDashboard | null; shifts: OwnerShift[] }) {
-  // 지원 도착한 모집중 시프트 (OPEN + pendingApplications > 0)
+/**
+ * 컴팩트 대시보드 — 1줄 4 알약. 액션 필요한 상태에 강조 배지(🔥/💬/⭐).
+ * 큰 게이지·제목 제거. 매칭률은 우측 작은 숫자로.
+ */
+function DashboardHeader({ dash, shifts, filter, onFilterChange }: {
+  dash: OwnerDashboard | null;
+  shifts: OwnerShift[];
+  filter: 'ALL' | 'OPEN' | 'MATCHED' | 'IN_PROGRESS' | 'COMPLETED';
+  onFilterChange: (f: 'ALL' | 'OPEN' | 'MATCHED' | 'IN_PROGRESS' | 'COMPLETED') => void;
+}) {
   const openWithApps = shifts.filter((s) => s.status === 'OPEN' && (s.pendingApplicationsCount ?? 0) > 0);
   const totalPending = openWithApps.reduce((sum, s) => sum + (s.pendingApplicationsCount ?? 0), 0);
-
-  // 채팅 unread 합 (매칭완료/근무중 시프트의 unread 합)
   const matchedUnread = shifts
     .filter((s) => (s.status === 'MATCHED' || s.status === 'IN_PROGRESS') && (s.chatUnreadCount ?? 0) > 0)
     .reduce((sum, s) => sum + (s.chatUnreadCount ?? 0), 0);
-
-  // 평가 대기 (CHECKED_OUT + ratingScore == null)
   const completedNeedRating = shifts.filter(
     (s) => s.status === 'COMPLETED' && s.matchStatus === 'CHECKED_OUT' && s.ratingScore == null,
   ).length;
 
-  function handleOpenPress() {
-    if (openWithApps.length === 1) {
-      router.push(`/owner/shift/${openWithApps[0].id}` as never);
-    } else {
-      router.push('/owner/dashboard/open' as never);
-    }
-  }
-
   return (
-    <View style={{ marginBottom: spacing.lg }}>
-      <Text style={styles.h2}>점주 대시보드</Text>
-      <Text style={[styles.subtitle, { marginTop: 4 }]}>
-        {dash ? `전체 ${dash.totalShifts}개 시프트` : '집계 중...'} · 1시간 매칭 SLA 자동 추적
-      </Text>
-
-      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginTop: 16 }}>
-        <StatCard
-          label="모집중"
+    <View style={{ marginBottom: spacing.md }}>
+      <View style={{ flexDirection: 'row', gap: 6, alignItems: 'stretch' }}>
+        <DashPill
+          label="모집"
           value={dash?.openShifts ?? 0}
           accent={colors.warn}
-          bg={colors.warnSoft}
-          icon="hourglass-outline"
-          onPress={handleOpenPress}
-          highlight={totalPending > 0
-            ? `🔥 ${openWithApps.length}건 지원 도착${openWithApps.length === 1 ? ` (${totalPending}명)` : ''}`
-            : undefined}
+          active={filter === 'OPEN'}
+          badge={totalPending > 0 ? `🔥 ${totalPending}` : undefined}
+          onPress={() => onFilterChange(filter === 'OPEN' ? 'ALL' : 'OPEN')}
         />
-        <StatCard
-          label="매칭완료"
+        <DashPill
+          label="매칭"
           value={dash?.matchedShifts ?? 0}
           accent={colors.info}
-          bg={colors.infoSoft}
-          icon="checkmark-circle-outline"
-          onPress={() => router.push('/owner/dashboard/matched' as never)}
-          highlight={matchedUnread > 0 ? `💬 채팅 ${matchedUnread}건` : undefined}
+          active={filter === 'MATCHED'}
+          badge={matchedUnread > 0 ? `💬 ${matchedUnread}` : undefined}
+          onPress={() => onFilterChange(filter === 'MATCHED' ? 'ALL' : 'MATCHED')}
         />
-        <StatCard
-          label="근무중"
+        <DashPill
+          label="근무"
           value={dash?.inProgressShifts ?? 0}
           accent={colors.primary}
-          bg={colors.primarySoft}
-          icon="time-outline"
-          onPress={() => router.push('/owner/dashboard/in-progress' as never)}
+          active={filter === 'IN_PROGRESS'}
+          onPress={() => onFilterChange(filter === 'IN_PROGRESS' ? 'ALL' : 'IN_PROGRESS')}
         />
-        <StatCard
+        <DashPill
           label="완료"
           value={dash?.completedShifts ?? 0}
           accent={colors.success}
-          bg={colors.successSoft}
-          icon="checkmark-done-outline"
-          onPress={() => router.push('/owner/dashboard/completed' as never)}
-          highlight={completedNeedRating > 0 ? `⭐ 평가 ${completedNeedRating}건 대기` : undefined}
+          active={filter === 'COMPLETED'}
+          badge={completedNeedRating > 0 ? `⭐ ${completedNeedRating}` : undefined}
+          onPress={() => onFilterChange(filter === 'COMPLETED' ? 'ALL' : 'COMPLETED')}
         />
       </View>
-
       {dash && dash.matchingSlaRate != null ? (
-        <View
-          style={{
-            marginTop: 14,
-            padding: 16,
-            borderRadius: radius.lg,
-            backgroundColor: dash.matchingSlaRate >= 0.8 ? colors.successSoft : colors.warnSoft,
-          }}
-        >
-          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-            <View>
-              <Text style={{ fontSize: 11, color: colors.textMuted, fontWeight: '700', letterSpacing: 0.5 }}>
-                내 매장 1시간 매칭률
-              </Text>
-              <Text
-                style={{
-                  fontSize: 32,
-                  fontWeight: '900',
-                  color: dash.matchingSlaRate >= 0.8 ? colors.success : colors.warn,
-                  marginTop: 4,
-                  letterSpacing: -0.5,
-                }}
-              >
-                {fmtPercent(dash.matchingSlaRate)}
-              </Text>
-            </View>
-            <View style={{ alignItems: 'flex-end' }}>
-              <Text style={{ fontSize: 11, color: colors.textMuted, fontWeight: '700' }}>
-                평균 매칭 시간
-              </Text>
-              <Text style={{ fontSize: 22, fontWeight: '800', color: colors.text, marginTop: 4 }}>
-                {dash.avgMatchingMinutes != null ? `${dash.avgMatchingMinutes}분` : '—'}
-              </Text>
-            </View>
-          </View>
-          {dash.pendingApplications > 0 ? (
-            <View
-              style={{
-                marginTop: 12,
-                paddingTop: 12,
-                borderTopWidth: 1,
-                borderTopColor: 'rgba(0,0,0,0.06)',
-                flexDirection: 'row',
-                alignItems: 'center',
-                gap: 6,
-              }}
-            >
-              <Icon name="notifications" size={14} color={colors.warn} />
-              <Text style={{ fontSize: 13, fontWeight: '700', color: colors.text }}>
-                대기 중 지원 {dash.pendingApplications}건 — 빨리 확정해서 SLA 지키세요
-              </Text>
-            </View>
-          ) : null}
-        </View>
+        <Text style={{ fontSize: 11, color: colors.textMuted, marginTop: 6, fontWeight: '600' }}>
+          1시간 매칭률 {fmtPercent(dash.matchingSlaRate)}
+          {dash.avgMatchingMinutes != null ? ` · 평균 ${dash.avgMatchingMinutes}분` : ''}
+          {dash.pendingApplications > 0 ? ` · ⏳ 대기 ${dash.pendingApplications}건` : ''}
+        </Text>
       ) : null}
-
-      <Text style={[styles.h2, { marginTop: 24, fontSize: 18 }]}>전체 시프트</Text>
     </View>
+  );
+}
+
+/**
+ * 빠른 진입 카드 — 세로 레이아웃 (이모지 위 / 라벨 아래 / 서브 라벨).
+ * 균등 너비, 라벨 한 줄 고정.
+ */
+function QuickLink({
+  emoji,
+  label,
+  sub,
+  onPress,
+}: {
+  emoji: string;
+  label: string;
+  sub?: string;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      onPress={onPress}
+      style={({ pressed }) => [
+        {
+          flex: 1,
+          paddingVertical: 12,
+          paddingHorizontal: 8,
+          borderRadius: radius.md,
+          borderWidth: 1,
+          borderColor: colors.border,
+          backgroundColor: colors.surface,
+          alignItems: 'center',
+          gap: 4,
+        },
+        pressed && { opacity: 0.75, backgroundColor: colors.surfaceAlt },
+      ]}
+    >
+      <Text style={{ fontSize: 22, lineHeight: 26 }}>{emoji}</Text>
+      <Text
+        style={{
+          fontSize: 12,
+          fontWeight: '800',
+          color: colors.text,
+          letterSpacing: -0.3,
+          lineHeight: 16,
+        }}
+        numberOfLines={1}
+      >
+        {label}
+      </Text>
+      {sub ? (
+        <Text
+          style={{
+            fontSize: 10,
+            color: colors.textMuted,
+            letterSpacing: -0.2,
+            lineHeight: 12,
+          }}
+          numberOfLines={1}
+        >
+          {sub}
+        </Text>
+      ) : null}
+    </Pressable>
+  );
+}
+
+/**
+ * 컴팩트 상태 알약 — 한 줄 4개. 액션 알림 배지 옵션.
+ */
+function DashPill({
+  label,
+  value,
+  accent,
+  active,
+  badge,
+  onPress,
+}: {
+  label: string;
+  value: number;
+  accent: string;
+  active: boolean;
+  badge?: string;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      onPress={onPress}
+      style={({ pressed }) => [
+        {
+          flex: 1,
+          paddingVertical: 8,
+          paddingHorizontal: 8,
+          borderRadius: radius.md,
+          borderWidth: 1.5,
+          borderColor: active ? accent : colors.border,
+          backgroundColor: active ? accent + '22' : colors.surface,
+          alignItems: 'center',
+        },
+        pressed && { opacity: 0.85 },
+      ]}
+    >
+      <Text style={{ fontSize: 18, fontWeight: '900', color: accent, lineHeight: 20 }}>
+        {value}
+      </Text>
+      <Text style={{ fontSize: 11, fontWeight: '700', color: active ? accent : colors.textMuted, marginTop: 2 }}>
+        {label}
+      </Text>
+      {badge ? (
+        <Text style={{ fontSize: 10, fontWeight: '800', color: accent, marginTop: 2 }} numberOfLines={1}>
+          {badge}
+        </Text>
+      ) : null}
+    </Pressable>
   );
 }
 

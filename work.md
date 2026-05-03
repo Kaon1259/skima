@@ -4,6 +4,81 @@
 
 ---
 
+## 2026-05-04 — 카카오 통합 + 점주/워커 첫 화면 다듬기 + UI 정돈
+
+### 1. 카카오 Local API 통합
+- 백엔드 신규: `KakaoLocalService` (RestTemplate + dapi.kakao.com keyword search), `KakaoLocalController` (`GET /api/kakao/places?q&lat&lng&size`), `KakaoPlace` DTO
+- 무료 30만/일, 비즈앱 등록 불요 — REST API 키만 있으면 됨
+- 검증: 강남역 좌표로 호출 → 78m/80m/107m 거리순 정렬 OK
+- 클라이언트 신규: `KakaoPlaceSearchModal` — 점주 매장 등록/수정 폼에서 매장명·주소·좌표·전화 자동 입력
+- 클라이언트 신규: `KakaoMapThumbnail` — Web은 Maps JS SDK iframe, Native는 placeholder. 워커 시프트 카드(88px), 점주 매장 폼 출근 게이트 100m 원형 시각화(180px)
+- ⚠️ 카카오 콘솔 등록 필요: 플랫폼키 → JavaScript 키 → 사이트 도메인에 `http://localhost:8081` 등록해야 Maps SDK 작동
+
+### 2. 시프트 추천 알고리즘
+- 워커 시프트 화면에 `🎯 추천순` 정렬 모드 추가, 기본값으로 설정
+- 점수 = 매장 TrustScore 25% + 별점 20% + (1−노쇼율) 10% + 거리 15% + 시급 10% + 단골 보너스 +15 + 능력적합 보너스 +5
+
+### 3. 점주 첫 화면 정돈 (DashboardHeader → DashPill)
+- 큰 4 StatCard + 1시간 매칭률 게이지 → **컴팩트 1줄 4 알약 (모집/매칭/근무/완료)** + 매칭률 작은 텍스트
+- 알약 자체가 필터 토글 겸함 (탭 → 해당 상태 필터, 다시 탭 → ALL)
+- 액션 배지 (🔥 지원도착 / 💬 채팅 / ⭐ 평가대기) 알약 아래 표시
+- **시프트 긴급도 자동 정렬**: OPEN+지원자 > IN_PROGRESS > MATCHED > COMPLETED+평가대기 > OPEN(빈) > 그 외 (정산 완료까지 매칭 시프트가 첫 화면 상단에 유지됨)
+- **빈 상태 CTA**: 매장≥1 + 시프트=0 → "📋 첫 시프트 등록하기" 큰 버튼 (헤더 비움)
+- 매장 0 → OnboardingSteps (변경 없음)
+
+### 4. 빠른 진입 3버튼 — 세로 카드 재설계
+- 가로 (이모지+긴 텍스트) 겹침 → **세로 (이모지 위 / 라벨 / 서브라벨)** 균등 너비 + numberOfLines={1}
+- 라벨 단축: 시프트 히스토리→히스토리, 워커 풀, 템플릿. 서브: 지난 시프트/단골 워커/반복 시프트
+- 신규 컴포넌트: `QuickLink` (in `owner/shifts.tsx`)
+
+### 5. 타이포 체계 다듬기 (`lib/theme.ts` — 전역)
+- 자간 강화: h1 -0.5→-0.8, h2 -0.3→-0.6, title -0→-0.4, body -0→-0.2 (한글 더 또박)
+- 행간 명시: 모든 텍스트 스타일에 lineHeight (h2 26, body 20, subtitle 18 등)
+- 사이즈 슬림: h1 28→26, h2 22→20, title 17→16, bigNumber 56→48
+- 타이틀 weight 700→800
+- 워커도 동일 적용 (전역 theme이라 자동)
+
+### 6. 헤더·아이콘 시스템 업그레이드
+- `Icon.tsx` → 이모지 매핑 → **Ionicons SVG** (이미 설치된 `@expo/vector-icons`, outline 스타일로 통일)
+- 영향: 워커/점주 탭바, 헤더 종, 모든 화면 아이콘 자동 정돈
+- `HeaderLogout` 재설계: 작은 아바타 + 이름 + ▾ → 탭하면 우측 상단 드롭다운 (큰 아바타·역할 표시 + 마이페이지/내매장 + 로그아웃)
+- 프로필 사진 헤더 연동: HeaderLogout이 `/api/me` 호출해 profileImage 캐시 → Avatar에 imageUrl 전달
+- `Avatar` 폴백 수정: 마지막 글자 → **첫 글자** (slice(0, 1)) — "점주김씨" → "점", "김민준" → "김" (영문은 대문자)
+
+### 7. 워커 시프트 카드 컴팩트화
+- padding 16→14, 마진 16→10, 아바타 38→32, 매장명 17→15px
+- 시간/근무/모집 3 알약 → **한 줄 텍스트** "🕐 5/4 14:00 / 4시간 근무 · 1명 모집"
+- "예상 보수" 라벨 박스 + 28px 큰 가격 → **인라인 우측** 20px 가격 + 시급 작게 아래
+- 지도 130px → **88px**
+- 능력 배지 → compact 모드
+- 1탭 지원 버튼 padding 14→11
+- 단골 테두리 4px → 3px
+- 결과: 카드 높이 약 30~35% 감소
+
+### 8. S3 업로드 500 픽스
+- 원인: Spring 재시작 후 `AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY` env 사라짐 → `DefaultCredentialsProvider`가 자격증명 못 찾아 `SdkClientException`
+- 픽스: `S3Service`에 `cloud.aws.credentials.access-key/secret-key` properties 주입 추가. 값 있으면 `StaticCredentialsProvider`, 없으면 기존 Default 폴백
+- `application-local.yml` (gitignored)에 키 등록 → 재시작에도 유지
+
+### 9. 단바 리브랜딩 잔여 (워커 + 점주 양쪽)
+- `+html.tsx` title: "스키마 바이트" → "단바 — 단기 알바 30분 매칭"
+- `index.tsx` 인트로 스플래시: 흰사각+⚡ → **icon.png 180px** (배경 크림 #FFF7ED), "스키마 바이트" → "단바"
+- `login.tsx` 로고: 오렌지박스+⚡ → icon.png 88px
+- `Splash.tsx` (로딩): icon.png 140px
+- 모든 화면이 실제 앱 아이콘(오렌지+노란번개+단바) 그대로 사용
+
+### 10. 사이드 작업
+- 아이콘 안전 마진 재렌더 (60% bolt, 20% top/left) — 라운드 코너로 잘림 방지
+- 워커/점주 헤더에 BrandMark (⚡단바 작은 칩) 추가
+- KakaoPlaceSearchModal에 카카오맵 미리보기 (web only, iframe) — 검색 결과 마커 + 내 위치 파란점
+
+### 잔여 (다음 세션)
+- 카카오 도메인 화이트리스트 등록 후 Map iframe 동작 검증
+- AWS IAM 키 로테이션 (보안)
+- saju에 있는 BrandMark/하단 메뉴 디자인 추가 참조
+
+---
+
 ## 2026-05-02 — GitHub 최초 push (https://github.com/Kaon1259/skima)
 
 ### 결정사항 (사용자 확정)

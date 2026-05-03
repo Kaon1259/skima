@@ -13,26 +13,29 @@
   }
   .bolt {
     position: absolute;
-    width: 90%; height: 90%;
-    top: 5%; left: 5%;
+    width: 60%; height: 60%;
+    top: 20%; left: 20%;
     filter: drop-shadow(0 24px 56px rgba(0,0,0,0.25));
   }
   .bolt path { fill: #FFEB3B; }
   .text {
     font-weight: 900;
-    font-size: 440px;
+    font-size: 340px;
     color: white;
-    letter-spacing: -24px;
+    letter-spacing: -18px;
     z-index: 2;
     text-shadow: 0 16px 64px rgba(0,0,0,0.35);
     line-height: 1;
+    /* 한글 받침 클리핑 방지 — 글자 박스를 약간 위로 보정 */
+    transform: translateY(-8px);
   }
 </style>
 </head>
 <body>
 <div class="icon">
+  <!-- 번개 path 자체를 viewBox 중앙에 가두기: 0..200 → 20..180 사용 -->
   <svg class="bolt" viewBox="0 0 200 200" preserveAspectRatio="xMidYMid meet">
-    <path d="M115 10 L70 110 L100 110 L60 200 L150 80 L115 80 Z"/>
+    <path d="M115 30 L75 115 L100 115 L70 175 L145 90 L115 90 Z"/>
   </svg>
   <div class="text">단바</div>
 </div>

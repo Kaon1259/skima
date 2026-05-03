@@ -4,6 +4,7 @@ import { router, useFocusEffect } from 'expo-router';
 
 import { Avatar } from '@/components/Avatar';
 import { Icon } from '@/components/Icon';
+import { WorkerHomeWidgets } from '@/components/WorkerHomeWidgets';
 import { WorkerTierBadge } from '@/components/WorkerTierBadge';
 import { api } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
@@ -146,6 +147,9 @@ export default function WorkerMyPageScreen() {
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={load} tintColor={colors.primary} />}
       ListHeaderComponent={
         <View>
+          {/* 오늘 매칭 / 다음 매칭 / 단골 매장 새 시프트 / 점주 직접 호출 등 — 시프트 화면에서 옮겨옴 */}
+          <WorkerHomeWidgets />
+
           {/* 프로필 헤더 */}
           <View style={{ marginBottom: spacing.lg, flexDirection: 'row', alignItems: 'center', gap: 12 }}>
             <Pressable

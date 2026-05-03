@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import {
   Alert,
+  Image,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -97,22 +98,18 @@ export default function LoginScreen() {
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
-        <View style={{ marginBottom: 36 }}>
-          <View
+        <View style={{ marginBottom: 36, alignItems: 'flex-start' }}>
+          <Image
+            source={require('@/assets/images/icon.png')}
             style={{
-              width: 64,
-              height: 64,
-              borderRadius: 18,
-              backgroundColor: colors.primary,
-              alignItems: 'center',
-              justifyContent: 'center',
+              width: 88,
+              height: 88,
+              borderRadius: 22,
               marginBottom: 16,
             }}
-          >
-            <Text style={{ fontSize: 32 }}>⚡</Text>
-          </View>
-          <Text style={styles.h1}>스키마 바이트</Text>
-          <Text style={[styles.subtitle, { marginTop: 6, fontSize: 14 }]}>
+            resizeMode="cover"
+          />
+          <Text style={[styles.subtitle, { marginTop: 4, fontSize: 14 }]}>
             1시간 매칭 · 30분 입금
           </Text>
         </View>

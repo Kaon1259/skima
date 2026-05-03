@@ -15,6 +15,8 @@ import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { Image as ExpoImage } from 'expo-image';
 
 import { Icon } from '@/components/Icon';
+import KakaoMapThumbnail from '@/components/KakaoMapThumbnail';
+import KakaoPlaceSearchModal, { KakaoPlace as KakaoPlaceData } from '@/components/KakaoPlaceSearchModal';
 import { blurFocusedForModal } from '@/components/RatingModal';
 import { api, ApiError } from '@/lib/api';
 import { getCurrentCoords } from '@/lib/geolocation';
@@ -616,15 +618,61 @@ function RegisterForm({
   };
   const isFranchise = cafeType === 'FRANCHISE_CAFE' || cafeType === 'FRANCHISE_BAKERY';
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [kakaoOpen, setKakaoOpen] = useState(false);
+
+  function handleKakaoSelect(p: KakaoPlaceData) {
+    if (p.placeName) setName(p.placeName);
+    const addr = p.roadAddressName ?? p.addressName;
+    if (addr) setAddress(addr);
+    if (p.latitude != null) setLatitude(p.latitude);
+    if (p.longitude != null) setLongitude(p.longitude);
+    if (p.phone) setPhone(p.phone);
+  }
 
   return (
     <ScrollView showsVerticalScrollIndicator={false}>
       <Text style={[styles.h2, { marginBottom: 4 }]}>
         {mode === 'edit' ? '매장 정보 수정' : '매장 등록'}
       </Text>
-      <Text style={[styles.subtitle, { marginBottom: 16 }]}>
+      <Text style={[styles.subtitle, { marginBottom: 12 }]}>
         매장 종류와 정보를 입력해주세요
       </Text>
+
+      {/* Kakao 매장 검색 — 이름·주소·좌표·전화 한 번에 자동 입력 */}
+      {mode === 'create' ? (
+        <Pressable
+          onPress={() => {
+            blurFocusedForModal();
+            setKakaoOpen(true);
+          }}
+          style={({ pressed }) => [
+            {
+              flexDirection: 'row',
+              alignItems: 'center',
+              gap: 10,
+              padding: 12,
+              borderRadius: radius.md,
+              borderWidth: 1.5,
+              borderStyle: 'dashed',
+              borderColor: colors.primary,
+              backgroundColor: colors.primarySoft,
+              marginBottom: 16,
+            },
+            pressed && { opacity: 0.85 },
+          ]}
+        >
+          <Text style={{ fontSize: 22 }}>🔍</Text>
+          <View style={{ flex: 1 }}>
+            <Text style={{ fontSize: 13, fontWeight: '800', color: colors.primaryDark }}>
+              카카오 지도에서 매장 찾기
+            </Text>
+            <Text style={{ fontSize: 11, color: colors.textMuted, marginTop: 2 }}>
+              매장명·주소·좌표·전화번호 한 번에 자동 입력
+            </Text>
+          </View>
+          <Icon name="chevron-forward" size={18} color={colors.primary} />
+        </Pressable>
+      ) : null}
 
       {/* Step 1: 매장 종류 */}
       <Text style={[styles.subtitle, { marginBottom: 8, fontWeight: '700' }]}>1. 매장 종류</Text>
@@ -751,25 +799,35 @@ function RegisterForm({
         }}
       >
         {latitude != null && longitude != null ? (
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-            <Text style={{ fontSize: 16 }}>📍</Text>
-            <View style={{ flex: 1 }}>
-              <Text style={{ fontSize: 12, fontWeight: '700', color: colors.text }}>
-                {latitude.toFixed(6)}, {longitude.toFixed(6)}
-              </Text>
-              <Text style={{ fontSize: 10, color: colors.textMuted, marginTop: 2 }}>
-                워커가 이 매장 반경 100m 안에서만 출근 체크인 가능
-              </Text>
+          <View style={{ gap: 10 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              <Text style={{ fontSize: 16 }}>📍</Text>
+              <View style={{ flex: 1 }}>
+                <Text style={{ fontSize: 12, fontWeight: '700', color: colors.text }}>
+                  {latitude.toFixed(6)}, {longitude.toFixed(6)}
+                </Text>
+                <Text style={{ fontSize: 10, color: colors.textMuted, marginTop: 2 }}>
+                  워커가 이 매장 반경 100m 안에서만 출근 체크인 가능
+                </Text>
+              </View>
+              <Pressable
+                onPress={() => {
+                  setLatitude(null);
+                  setLongitude(null);
+                }}
+                hitSlop={8}
+              >
+                <Text style={{ fontSize: 18, color: colors.textMuted, paddingHorizontal: 4 }}>×</Text>
+              </Pressable>
             </View>
-            <Pressable
-              onPress={() => {
-                setLatitude(null);
-                setLongitude(null);
-              }}
-              hitSlop={8}
-            >
-              <Text style={{ fontSize: 18, color: colors.textMuted, paddingHorizontal: 4 }}>×</Text>
-            </Pressable>
+            <KakaoMapThumbnail
+              latitude={latitude}
+              longitude={longitude}
+              placeName={name || '내 매장'}
+              address={address}
+              height={180}
+              showGateRadius
+            />
           </View>
         ) : (
           <View>
@@ -887,6 +945,14 @@ function RegisterForm({
           setBrand(b);
           setPickerOpen(false);
         }}
+      />
+
+      {/* 카카오 매장 검색 모달 */}
+      <KakaoPlaceSearchModal
+        visible={kakaoOpen}
+        onClose={() => setKakaoOpen(false)}
+        onSelect={handleKakaoSelect}
+        initialQuery={name}
       />
     </ScrollView>
   );

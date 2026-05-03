@@ -4,7 +4,10 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
+import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
+import software.amazon.awssdk.auth.credentials.AwsCredentialsProvider;
 import software.amazon.awssdk.auth.credentials.DefaultCredentialsProvider;
+import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
 import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.s3.S3Client;
@@ -33,14 +36,25 @@ public class S3Service {
     private final boolean enabled;
 
     public S3Service(@Value("${cloud.aws.s3.bucket:}") String bucket,
-                     @Value("${cloud.aws.s3.region:ap-northeast-2}") String region) {
+                     @Value("${cloud.aws.s3.region:ap-northeast-2}") String region,
+                     @Value("${cloud.aws.credentials.access-key:}") String accessKey,
+                     @Value("${cloud.aws.credentials.secret-key:}") String secretKey) {
         this.bucket = bucket;
         this.region = region;
         this.enabled = bucket != null && !bucket.isBlank();
         if (this.enabled) {
+            // 우선순위: application-local.yml 의 access-key/secret-key → env vars → IAM role
+            AwsCredentialsProvider provider;
+            if (accessKey != null && !accessKey.isBlank() && secretKey != null && !secretKey.isBlank()) {
+                provider = StaticCredentialsProvider.create(AwsBasicCredentials.create(accessKey, secretKey));
+                log.info("S3Service: 자격증명 = application-local.yml (Static)");
+            } else {
+                provider = DefaultCredentialsProvider.create();
+                log.info("S3Service: 자격증명 = DefaultCredentialsProvider (env vars / profile / IAM role)");
+            }
             this.s3Client = S3Client.builder()
                     .region(Region.of(region))
-                    .credentialsProvider(DefaultCredentialsProvider.create())
+                    .credentialsProvider(provider)
                     .build();
             log.info("S3Service enabled — bucket={} region={}", bucket, region);
         } else {

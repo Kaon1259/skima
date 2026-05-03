@@ -10,9 +10,11 @@ export const API_BASE_URL =
     ? `http://localhost:${PORT}`
     : `http://${LAN_HOST}:${PORT}`;
 
-// Kakao OAuth — saju 프로젝트와 동일 앱 키 공유.
-// 운영 시에는 Skima 전용 Kakao 앱을 새로 만들고 여기 키만 교체.
-export const KAKAO_REST_API_KEY = '08895d0f24c6adbdff9c85ee84469e88';
+// Kakao OAuth & Maps — 단바-Test 앱 (kaon1259@naver.com).
+// 운영 전환 시 별도 앱 등록 + 여기 키 교체.
+export const KAKAO_REST_API_KEY = '9894a16c6ba7e3fb64b86d40faba3602';
+// Maps JS SDK 용 — 웹 카카오맵 임베드 (도메인 화이트리스트에 localhost:8081 등록 필요)
+export const KAKAO_JS_KEY = '6503eacf18397d4ed687900cfc61bf6c';
 
 // 콜백 URL — Kakao Developers 콘솔의 redirect URI 에 반드시 등록되어 있어야 함
 // Web: http://localhost:8081/auth/kakao/callback (개발) — 운영은 도메인 등록 필요
