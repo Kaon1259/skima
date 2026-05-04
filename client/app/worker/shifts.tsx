@@ -126,6 +126,33 @@ export default function WorkerShiftsScreen() {
     [myLevelRank, myRolesSet, myCertsSet],
   );
 
+  // 추천 정렬 시 카드에 노출할 추천 이유 — score 가중치 기여도 큰 시그널부터 최대 3개
+  const recommendReasons = useCallback(
+    (s: WorkerShift): string[] => {
+      const reasons: string[] = [];
+      const isFav = favIds.has(s.cafeId) || !!s.isFavoriteCafe;
+      if (isFav) reasons.push('⭐ 단골 매장');
+      if (isFitForMe(s)) reasons.push('💪 능력 적합');
+      if (s.cafeTrustScore != null && s.cafeTrustScore >= 75) reasons.push('🛡️ 신뢰 매장');
+      let d: number | null = null;
+      if (myCoords && s.cafeLatitude != null && s.cafeLongitude != null) {
+        d = distanceKm(myCoords, { latitude: s.cafeLatitude, longitude: s.cafeLongitude });
+      }
+      if (d != null && d <= 2) {
+        const dStr = d < 1 ? `${Math.round(d * 1000)}m` : `${d.toFixed(1)}km`;
+        reasons.push(`📍 ${dStr}`);
+      }
+      if (s.cafeAvgRating != null && s.cafeAvgRating >= 4.5) {
+        reasons.push(`★ ${s.cafeAvgRating.toFixed(1)}`);
+      }
+      if (s.hourlyWage >= 15000) {
+        reasons.push(`💰 시급 ${Math.round(s.hourlyWage / 1000)}k`);
+      }
+      return reasons.slice(0, 3);
+    },
+    [favIds, isFitForMe, myCoords],
+  );
+
   const visibleShifts = useMemo(() => {
     const now = new Date();
     const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
@@ -722,6 +749,7 @@ export default function WorkerShiftsScreen() {
         const dKm = (myCoords && item.cafeLatitude != null && item.cafeLongitude != null)
           ? distanceKm(myCoords, { latitude: item.cafeLatitude, longitude: item.cafeLongitude })
           : null;
+        const reasons = sortMode === 'recommend' ? recommendReasons(item) : [];
 
         return (
           <View
@@ -789,6 +817,40 @@ export default function WorkerShiftsScreen() {
               </Pressable>
               <StatusPill status={myStatus} />
             </View>
+
+            {reasons.length > 0 ? (
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 4, marginTop: 10, alignItems: 'center' }}>
+                <View
+                  style={{
+                    paddingHorizontal: 7,
+                    paddingVertical: 3,
+                    borderRadius: radius.pill,
+                    backgroundColor: colors.primary,
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    gap: 3,
+                  }}
+                >
+                  <Text style={{ fontSize: 10 }}>🎯</Text>
+                  <Text style={{ fontSize: 10, fontWeight: '900', color: '#fff' }}>추천</Text>
+                </View>
+                {reasons.map((r, i) => (
+                  <View
+                    key={i}
+                    style={{
+                      paddingHorizontal: 7,
+                      paddingVertical: 3,
+                      borderRadius: radius.pill,
+                      backgroundColor: colors.primarySoft,
+                    }}
+                  >
+                    <Text style={{ fontSize: 11, fontWeight: '700', color: colors.primaryDark }}>
+                      {r}
+                    </Text>
+                  </View>
+                ))}
+              </View>
+            ) : null}
 
             {/* 핵심 정보 한 줄: 시간/근무/모집 + 우측 가격 */}
             <View
