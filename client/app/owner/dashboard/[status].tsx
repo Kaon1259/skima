@@ -2,6 +2,7 @@ import { useCallback, useMemo, useState } from 'react';
 import { Alert, FlatList, Platform, Pressable, RefreshControl, Text, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 
+import { initialFor } from '@/components/Avatar';
 import { Icon } from '@/components/Icon';
 import ShiftSkillBadges from '@/components/ShiftSkillBadges';
 import { api } from '@/lib/api';
@@ -277,7 +278,7 @@ function DashboardShiftCard({ shift, status }: { shift: OwnerShift; status: Stat
             }}
           >
             <Text style={{ color: '#fff', fontWeight: '900', fontSize: 11 }}>
-              {shift.matchedWorkerName.slice(-1)}
+              {initialFor(shift.matchedWorkerName)}
             </Text>
           </View>
           <View style={{ flex: 1 }}>

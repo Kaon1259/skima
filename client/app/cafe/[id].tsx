@@ -4,6 +4,7 @@ import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 
 import { Image as ExpoImage } from 'expo-image';
 
+import { initialFor } from '@/components/Avatar';
 import { Icon } from '@/components/Icon';
 import { SkeletonCard } from '@/components/Skeleton';
 import { TrustScoreBadge } from '@/components/TrustScoreBadge';
@@ -481,7 +482,7 @@ function RegularsCard({ detail }: { detail: CafeDetail }) {
             }}
           >
             <Text style={{ color: colors.success, fontWeight: '900' }}>
-              {r.workerName.slice(-1)}
+              {initialFor(r.workerName)}
             </Text>
           </View>
           <View style={{ flex: 1 }}>

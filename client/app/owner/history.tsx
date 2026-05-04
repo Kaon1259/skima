@@ -2,6 +2,7 @@ import { useCallback, useMemo, useState } from 'react';
 import { Alert, FlatList, Platform, Pressable, RefreshControl, ScrollView, Text, TextInput, View } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
 
+import { initialFor } from '@/components/Avatar';
 import { Icon } from '@/components/Icon';
 import { api } from '@/lib/api';
 import { Cafe, OwnerShift, fmtDateTime, fmtKRW } from '@/lib/types';
@@ -288,7 +289,7 @@ function HistoryCard({ shift }: { shift: OwnerShift }) {
             }}
           >
             <Text style={{ color: '#fff', fontWeight: '900', fontSize: 11 }}>
-              {shift.matchedWorkerName.slice(-1)}
+              {initialFor(shift.matchedWorkerName)}
             </Text>
           </View>
           <View style={{ flex: 1 }}>

@@ -94,6 +94,9 @@ export default function WorkerHomeScreen() {
     completed: payouts.filter((p) => p.status === 'COMPLETED').length,
   };
 
+  // 모든 활성 매칭에서 점주가 보낸 unread 합산 — 빠른 진입 "내 매칭" 버튼 뱃지에 사용
+  const totalChatUnread = matches.reduce((sum, m) => sum + (m.chatUnreadCount ?? 0), 0);
+
   const profileIncomplete = !!me
     && me.role === 'WORKER'
     && (me.selfReportedLevel == null || (me.capableRoles?.length ?? 0) === 0);
@@ -182,6 +185,26 @@ export default function WorkerHomeScreen() {
                 ? '👉 탭해서 체크아웃 / 채팅'
                 : '👉 탭해서 체크인 / 채팅'}
             </Text>
+            {todayMatch.chatUnreadCount && todayMatch.chatUnreadCount > 0 ? (
+              <View
+                style={{
+                  marginTop: 10,
+                  alignSelf: 'flex-start',
+                  paddingHorizontal: 10,
+                  paddingVertical: 5,
+                  borderRadius: radius.pill,
+                  backgroundColor: '#fff',
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  gap: 5,
+                }}
+              >
+                <Text style={{ fontSize: 13 }}>💬</Text>
+                <Text style={{ fontSize: 12, fontWeight: '900', color: colors.danger }}>
+                  점주 새 메시지 {todayMatch.chatUnreadCount > 99 ? '99+' : todayMatch.chatUnreadCount}건
+                </Text>
+              </View>
+            ) : null}
           </>
         ) : (
           <>
@@ -397,7 +420,31 @@ export default function WorkerHomeScreen() {
             pressed && { opacity: 0.85 },
           ]}
         >
-          <Text style={{ fontSize: 22 }}>✅</Text>
+          <View>
+            <Text style={{ fontSize: 22 }}>✅</Text>
+            {totalChatUnread > 0 ? (
+              <View
+                style={{
+                  position: 'absolute',
+                  top: -6,
+                  right: -12,
+                  minWidth: 18,
+                  height: 18,
+                  paddingHorizontal: 5,
+                  borderRadius: 9,
+                  backgroundColor: colors.danger,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  borderWidth: 2,
+                  borderColor: colors.infoSoft,
+                }}
+              >
+                <Text style={{ fontSize: 10, fontWeight: '900', color: '#fff' }}>
+                  {totalChatUnread > 99 ? '99+' : totalChatUnread}
+                </Text>
+              </View>
+            ) : null}
+          </View>
           <Text style={{ fontSize: 12, fontWeight: '800', color: colors.info, marginTop: 4 }}>
             내 매칭
           </Text>

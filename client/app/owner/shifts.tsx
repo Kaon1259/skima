@@ -2,7 +2,7 @@ import { useCallback, useMemo, useState } from 'react';
 import { Alert, FlatList, Platform, Pressable, RefreshControl, Text, TextInput, View } from 'react-native';
 import { router } from 'expo-router';
 
-import { EmptyState } from '@/components/EmptyState';
+import { initialFor } from '@/components/Avatar';
 import { Icon } from '@/components/Icon';
 import { RatingModal, blurFocusedForModal } from '@/components/RatingModal';
 import ShiftSkillBadges from '@/components/ShiftSkillBadges';
@@ -474,38 +474,6 @@ function NextActionChip({ emoji, label, onPress }: { emoji: string; label: strin
   );
 }
 
-function FilterChip({ label, active, onPress, count }: { label: string; active: boolean; onPress: () => void; count?: number }) {
-  return (
-    <Pressable
-      onPress={onPress}
-      style={{
-        paddingHorizontal: 12,
-        paddingVertical: 7,
-        borderRadius: radius.pill,
-        borderWidth: 1.5,
-        borderColor: active ? colors.primary : colors.border,
-        backgroundColor: active ? colors.primary : colors.surface,
-        flexDirection: 'row',
-        gap: 4,
-        alignItems: 'center',
-      }}
-    >
-      <Text style={{ fontSize: 12, fontWeight: '700', color: active ? '#fff' : colors.text }}>{label}</Text>
-      {count != null && count > 0 ? (
-        <View
-          style={{
-            paddingHorizontal: 6,
-            borderRadius: radius.pill,
-            backgroundColor: active ? 'rgba(255,255,255,0.25)' : colors.warn,
-          }}
-        >
-          <Text style={{ fontSize: 10, fontWeight: '800', color: '#fff' }}>{count}</Text>
-        </View>
-      ) : null}
-    </Pressable>
-  );
-}
-
 /**
  * 컴팩트 대시보드 — 1줄 4 알약. 액션 필요한 상태에 강조 배지(🔥/💬/⭐).
  * 큰 게이지·제목 제거. 매칭률은 우측 작은 숫자로.
@@ -676,342 +644,21 @@ function DashPill({
         {label}
       </Text>
       {badge ? (
-        <Text style={{ fontSize: 10, fontWeight: '800', color: accent, marginTop: 2 }} numberOfLines={1}>
-          {badge}
-        </Text>
-      ) : null}
-    </Pressable>
-  );
-}
-
-function StatCard({
-  label,
-  value,
-  accent,
-  bg,
-  icon,
-  onPress,
-  highlight,
-}: {
-  label: string;
-  value: number;
-  accent: string;
-  bg: string;
-  icon: string;
-  onPress?: () => void;
-  highlight?: string;
-}) {
-  const hasHighlight = !!highlight;
-  return (
-    <Pressable
-      onPress={onPress}
-      style={({ pressed }) => [
-        {
-          flexBasis: '47%',
-          flexGrow: 1,
-          padding: 14,
-          borderRadius: radius.lg,
-          backgroundColor: hasHighlight ? bg : colors.surface,
-          borderWidth: hasHighlight ? 1.5 : 1,
-          borderColor: hasHighlight ? accent : colors.border,
-        },
-        pressed && { opacity: 0.7, borderColor: accent },
-      ]}
-    >
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-        <View style={{ padding: 6, borderRadius: 8, backgroundColor: hasHighlight ? '#fff' : bg }}>
-          <Icon name={icon} size={14} color={accent} />
-        </View>
-        <Text style={{ fontSize: 12, color: colors.textMuted, fontWeight: '700' }}>{label}</Text>
-        <View style={{ flex: 1 }} />
-        {onPress ? <Icon name="chevron-forward" size={14} color={colors.textLight} /> : null}
-      </View>
-      <Text style={{ fontSize: 26, fontWeight: '900', color: colors.text, marginTop: 6, letterSpacing: -0.5 }}>
-        {value}
-      </Text>
-      {hasHighlight ? (
-        <Text style={{ fontSize: 11, fontWeight: '800', color: accent, marginTop: 4 }} numberOfLines={1}>
-          {highlight}
-        </Text>
-      ) : null}
-    </Pressable>
-  );
-}
-
-function TodayWidgets({ shifts }: { shifts: OwnerShift[] }) {
-  const now = Date.now();
-  const startOfToday = new Date();
-  startOfToday.setHours(0, 0, 0, 0);
-  const endOfToday = startOfToday.getTime() + 24 * 3600 * 1000;
-
-  const todayShifts = shifts.filter((s) => {
-    const t = new Date(s.startAt).getTime();
-    return t >= startOfToday.getTime() && t < endOfToday;
-  });
-  const todayMatched = todayShifts.filter((s) => s.matchId != null).length;
-  const todayInProgress = shifts.filter((s) => s.status === 'IN_PROGRESS').length;
-
-  // SLA 임박: OPEN + 등록 30분+ 매칭 안 된 것
-  const slaWarn = shifts.filter((s) => {
-    if (s.status !== 'OPEN') return false;
-    if (!s.createdAt) return false;
-    const minutesAgo = (now - new Date(s.createdAt).getTime()) / 60000;
-    return minutesAgo > 30;
-  });
-
-  if (todayShifts.length === 0 && slaWarn.length === 0 && todayInProgress === 0) {
-    return null; // 아무것도 없으면 위젯 영역 자체 숨김
-  }
-
-  return (
-    <View style={{ marginBottom: spacing.lg, flexDirection: 'row', gap: 8 }}>
-      <Pressable
-        onPress={() => router.push('/owner/dashboard/in-progress' as never)}
-        style={({ pressed }) => [
-          {
-            flex: 1,
-            padding: 14,
-            borderRadius: radius.md,
-            backgroundColor: todayInProgress > 0 ? colors.primary : colors.surface,
-            borderWidth: 1,
-            borderColor: todayInProgress > 0 ? colors.primary : colors.border,
-          },
-          pressed && { opacity: 0.85 },
-        ]}
-      >
-        <Text style={{ fontSize: 11, fontWeight: '800', color: todayInProgress > 0 ? 'rgba(255,255,255,0.85)' : colors.textMuted }}>
-          오늘 · 근무중
-        </Text>
-        <Text style={{ fontSize: 22, fontWeight: '900', color: todayInProgress > 0 ? '#fff' : colors.text, marginTop: 4 }}>
-          {todayInProgress}건
-        </Text>
-        <Text style={{ fontSize: 10, color: todayInProgress > 0 ? 'rgba(255,255,255,0.85)' : colors.textMuted, marginTop: 2 }}>
-          오늘 시작 시프트 {todayShifts.length}건 / 매칭 {todayMatched}건
-        </Text>
-      </Pressable>
-
-      <Pressable
-        onPress={() => router.push('/owner/dashboard/open' as never)}
-        style={({ pressed }) => [
-          {
-            flex: 1,
-            padding: 14,
-            borderRadius: radius.md,
-            backgroundColor: slaWarn.length > 0 ? colors.warnSoft : colors.surface,
-            borderWidth: 1,
-            borderColor: slaWarn.length > 0 ? colors.warn : colors.border,
-          },
-          pressed && { opacity: 0.85 },
-        ]}
-      >
-        <Text style={{ fontSize: 11, fontWeight: '800', color: slaWarn.length > 0 ? colors.warn : colors.textMuted }}>
-          ⏱️ SLA 임박
-        </Text>
-        <Text
+        <View
           style={{
-            fontSize: 22,
-            fontWeight: '900',
-            color: slaWarn.length > 0 ? colors.warn : colors.text,
-            marginTop: 4,
+            marginTop: 3,
+            paddingHorizontal: 6,
+            paddingVertical: 1,
+            borderRadius: radius.pill,
+            backgroundColor: colors.danger,
           }}
         >
-          {slaWarn.length}건
-        </Text>
-        <Text style={{ fontSize: 10, color: colors.textMuted, marginTop: 2 }}>
-          {slaWarn.length > 0
-            ? '등록 30분+ 매칭 안 됨 — 빨리 확인'
-            : '모든 시프트 정상 진행 중'}
-        </Text>
-      </Pressable>
-    </View>
-  );
-}
-
-function CafeStatsRow({
-  stats,
-  pinned,
-  onTogglePin,
-}: {
-  stats: CafeStats[];
-  pinned: Set<number>;
-  onTogglePin: (cafeId: number) => void;
-}) {
-  if (!stats || stats.length === 0) return null;
-  // ⭐ pin 한 매장 먼저, 그 다음 이번달 매칭 많은 순
-  const sorted = [...stats].sort((a, b) => {
-    const ap = pinned.has(a.cafeId) ? 1 : 0;
-    const bp = pinned.has(b.cafeId) ? 1 : 0;
-    if (ap !== bp) return bp - ap;
-    return (b.monthCompletedMatches ?? 0) - (a.monthCompletedMatches ?? 0);
-  });
-  const hasPinned = sorted.some((c) => pinned.has(c.cafeId));
-  return (
-    <View style={{ marginBottom: spacing.lg }}>
-      <Text style={[styles.subtitle, { fontWeight: '700', marginBottom: 8 }]}>
-        매장별 이번달 요약 {hasPinned ? '(⭐ 우선 · 활동 많은 순)' : '(활동 많은 순)'}
-      </Text>
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={{ gap: 10, paddingRight: 16 }}
-      >
-        {sorted.map((c) => {
-          const ratingPct = c.avgRating != null ? c.avgRating / 5 : 0;
-          const noShowPct = c.noShowRate != null ? c.noShowRate : 0;
-          const thisTotal = c.monthGross + c.monthFee;
-          const prev = c.prevMonthGross ?? 0;
-          const trend: 'up' | 'down' | 'flat' | null = prev === 0 && thisTotal === 0
-            ? null
-            : thisTotal > prev ? 'up' : thisTotal < prev ? 'down' : 'flat';
-          const trendPct = prev > 0 ? Math.round(((thisTotal - prev) / prev) * 100) : null;
-          return (
-            <Pressable
-              key={c.cafeId}
-              style={({ pressed }) => [
-                {
-                  width: 240,
-                  padding: 14,
-                  borderRadius: radius.lg,
-                  backgroundColor: colors.surface,
-                  borderWidth: 1,
-                  borderColor: colors.border,
-                },
-                pressed && { opacity: 0.85 },
-              ]}
-              onPress={() => router.push(`/cafe/${c.cafeId}` as never)}
-            >
-              {/* 헤더: 브랜드 아바타 + 매장명 + ⭐ 핀 */}
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                {c.brandLetter ? (
-                  <View
-                    style={{
-                      width: 28,
-                      height: 28,
-                      borderRadius: 14,
-                      backgroundColor: c.brandColor ?? colors.primary,
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                    }}
-                  >
-                    <Text style={{ color: '#fff', fontSize: 11, fontWeight: '900' }}>{c.brandLetter}</Text>
-                  </View>
-                ) : null}
-                <Text style={{ flex: 1, fontWeight: '800', fontSize: 13, color: colors.text }} numberOfLines={1}>
-                  {c.cafeName}
-                </Text>
-                <Pressable
-                  onPress={(e) => {
-                    e.stopPropagation();
-                    onTogglePin(c.cafeId);
-                  }}
-                  hitSlop={8}
-                  style={({ pressed }) => [
-                    { paddingHorizontal: 4, paddingVertical: 2 },
-                    pressed && { opacity: 0.6 },
-                  ]}
-                >
-                  <Text style={{ fontSize: 16 }}>{pinned.has(c.cafeId) ? '⭐' : '☆'}</Text>
-                </Pressable>
-              </View>
-
-              {/* 이번달 매출 */}
-              <Text style={{ fontSize: 11, color: colors.textMuted, fontWeight: '700', marginTop: 12 }}>
-                이번달 총 지출
-              </Text>
-              <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 6, marginTop: 2 }}>
-                <Text style={{ fontSize: 22, fontWeight: '900', color: colors.text }}>
-                  {fmtKRW(thisTotal)}
-                </Text>
-                {trend && trend !== 'flat' ? (
-                  <Text style={{
-                    fontSize: 11,
-                    fontWeight: '800',
-                    color: trend === 'up' ? colors.success : colors.danger,
-                  }}>
-                    {trend === 'up' ? '▲' : '▼'}
-                    {trendPct != null ? ` ${Math.abs(trendPct)}%` : ''}
-                  </Text>
-                ) : null}
-              </View>
-              <Text style={{ fontSize: 11, color: colors.textLight, marginTop: 2 }}>
-                임금 {fmtKRW(c.monthGross)} · 수수료 {fmtKRW(c.monthFee)}
-                {prev > 0 ? ` · 지난달 ${fmtKRW(prev)}` : ''}
-              </Text>
-
-              {/* 시프트 카운트 미니 */}
-              <View
-                style={{
-                  marginTop: 12,
-                  paddingTop: 10,
-                  borderTopWidth: 1,
-                  borderTopColor: colors.border,
-                  flexDirection: 'row',
-                  gap: 12,
-                }}
-              >
-                <Pill label="모집중" value={c.openShifts} accent={colors.warn} />
-                <Pill label="진행" value={c.matchedShifts} accent={colors.info} />
-                <Pill label="완료" value={c.completedShifts} accent={colors.success} />
-              </View>
-
-              {/* 별점 + 노쇼 바 */}
-              <View style={{ marginTop: 10 }}>
-                <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-                  <Text style={{ fontSize: 11, color: colors.textMuted, fontWeight: '700' }}>
-                    평균 별점
-                  </Text>
-                  <Text style={{ fontSize: 11, color: colors.text, fontWeight: '800' }}>
-                    {c.avgRating != null ? `★ ${c.avgRating.toFixed(2)} (${c.ratingsCount ?? 0})` : '—'}
-                  </Text>
-                </View>
-                <Bar pct={ratingPct} color={colors.warn} />
-                <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 8 }}>
-                  <Text style={{ fontSize: 11, color: colors.textMuted, fontWeight: '700' }}>
-                    노쇼율
-                  </Text>
-                  <Text style={{ fontSize: 11, color: colors.text, fontWeight: '800' }}>
-                    {c.noShowRate != null ? fmtPercent(c.noShowRate) : '—'}
-                  </Text>
-                </View>
-                <Bar pct={noShowPct} color={colors.danger} />
-              </View>
-            </Pressable>
-          );
-        })}
-      </ScrollView>
-    </View>
-  );
-}
-
-function Pill({ label, value, accent }: { label: string; value: number; accent: string }) {
-  return (
-    <View style={{ alignItems: 'center', flex: 1 }}>
-      <Text style={{ fontSize: 18, fontWeight: '900', color: accent }}>{value}</Text>
-      <Text style={{ fontSize: 10, color: colors.textMuted, fontWeight: '700' }}>{label}</Text>
-    </View>
-  );
-}
-
-function Bar({ pct, color }: { pct: number; color: string }) {
-  const clamped = Math.max(0, Math.min(1, pct));
-  return (
-    <View
-      style={{
-        marginTop: 4,
-        height: 5,
-        backgroundColor: colors.surfaceMuted,
-        borderRadius: 3,
-        overflow: 'hidden',
-      }}
-    >
-      <View
-        style={{
-          width: `${clamped * 100}%`,
-          height: '100%',
-          backgroundColor: color,
-        }}
-      />
-    </View>
+          <Text style={{ fontSize: 10, fontWeight: '900', color: '#fff' }} numberOfLines={1}>
+            {badge}
+          </Text>
+        </View>
+      ) : null}
+    </Pressable>
   );
 }
 
@@ -1032,6 +679,7 @@ function ShiftCard({
   const matched = shift.matchingMinutes != null;
   const within = matched && shift.matchingMinutes! <= 60;
   const hasPending = shift.pendingApplicationsCount > 0;
+  const hasUnread = (shift.chatUnreadCount ?? 0) > 0;
   const cancellable = shift.status === 'OPEN' || shift.status === 'MATCHED';
   const completedReady = shift.status === 'COMPLETED' && shift.matchStatus === 'CHECKED_OUT';
   const rated = shift.ratingScore != null;
@@ -1041,7 +689,11 @@ function ShiftCard({
     <View
       style={[
         styles.card,
-        hasPending && { borderWidth: 1.5, borderColor: colors.primary },
+        hasPending
+          ? { borderWidth: 1.5, borderColor: colors.primary }
+          : hasUnread
+            ? { borderWidth: 1.5, borderColor: colors.danger }
+            : null,
       ]}
     >
       <Pressable onPress={() => router.push(`/owner/shift/${shift.id}`)}>
@@ -1152,7 +804,7 @@ function ShiftCard({
             }}
           >
             <Text style={{ color: '#fff', fontWeight: '900', fontSize: 12 }}>
-              {shift.matchedWorkerName.slice(-1)}
+              {initialFor(shift.matchedWorkerName)}
             </Text>
           </View>
           <View style={{ flex: 1 }}>
@@ -1173,6 +825,25 @@ function ShiftCard({
               </Text>
             )}
           </View>
+          {hasUnread ? (
+            <Pressable
+              onPress={() => router.push(`/owner/shift/${shift.id}` as never)}
+              style={{
+                paddingHorizontal: 10,
+                paddingVertical: 6,
+                borderRadius: radius.pill,
+                backgroundColor: colors.danger,
+                flexDirection: 'row',
+                alignItems: 'center',
+                gap: 4,
+              }}
+            >
+              <Text style={{ fontSize: 12 }}>💬</Text>
+              <Text style={{ color: '#fff', fontSize: 12, fontWeight: '900' }}>
+                {shift.chatUnreadCount! > 99 ? '99+' : shift.chatUnreadCount}
+              </Text>
+            </Pressable>
+          ) : null}
           {needsRating ? (
             <Pressable
               onPress={onRate}

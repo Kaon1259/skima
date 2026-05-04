@@ -4,6 +4,65 @@
 
 ---
 
+## 2026-05-04 (이어서) — 코드 검토 · 죽은코드 정리 · Expo Go 픽스 · 채팅 unread 강화
+
+### 1. 점주/워커 홈 코드 검토 (사용자 요청 "어제 마지막에 점주/워커 홈 UX/UI 정리한 코드 체크")
+- `owner/shifts.tsx` 1231줄에서 죽은 코드 발견:
+  - 함수 6개: `FilterChip`, `StatCard`, `TodayWidgets`, `CafeStatsRow`, `Pill`, `Bar` (호출처 0)
+  - import 2개: `EmptyState`, `ScrollView` (위 죽은 코드에서만 사용)
+  - `CafeStats` 타입 import 누락 (죽은 코드 내부에서만 사용 — TS strict 미비활성으로 통과 중)
+- 인라인 아바타 폴백 `slice(-1)` 4곳 발견 (어제 라운드 "Avatar 폴백 첫 글자 통일" 의도와 충돌):
+  - `cafe/[id].tsx:484`, `owner/history.tsx:291`, `owner/dashboard/[status].tsx:280`, `owner/shifts.tsx:1155`
+- 1차 분석에서 부정확한 부분 자체 정정: 처음 1곳만 짚었으나 실제 4곳 + EmptyState import 누락 추가 발견
+
+### 2. 죽은 코드 정리 (`owner/shifts.tsx`)
+- sed 로 477~508 + 687~1017 라인 범위 삭제 (363줄)
+- import 2개 제거 (`EmptyState`, `ScrollView`)
+- 결과: **1231 → 867줄 (364줄, ≈ −29%)**
+
+### 3. 인라인 아바타 폴백 통일
+- `components/Avatar.tsx` 의 `initialFor` 함수 export 추가 (한글 첫 글자 + 영문 대문자 처리)
+- 4곳 인라인 아바타: `slice(-1)` → `initialFor(name)` 호출로 교체
+- 색상·크기 그대로 유지 (Avatar 컴포넌트 통째 교체는 색상이 바뀌어 보류) — 폴백 글자 로직만 통일
+
+### 4. Expo Go 부팅 ERROR 픽스 (`lib/push.ts`) — 사용자 보고 "expo go에서 앱 접근 안됨"
+- 증상: Expo Go SDK 53+ 에서 `expo-notifications` 모듈을 import 만 해도 `DevicePushTokenAutoRegistration.fx.js` 가 ERROR throw → 앱이 `_layout.tsx` 도달 전 죽음
+- 우리는 SDK 54
+- 픽스: `expo-notifications` / `expo-device` 정적 import 제거 → `Constants.appOwnership === 'expo'` 로 Expo Go 감지 후 conditional `require`
+- Expo Go 에서는 모듈 자체를 안 불러옴 → ERROR 안 나감 → 앱 정상 부팅
+- Native dev build / production 빌드 에서는 그대로 푸시 토큰 발급 + 등록 작동
+- HMR graph traverse 충돌로 `--clear` 옵션으로 Metro 재기동 필요했음
+
+### 5. 채팅 unread 인식 강화 — 사용자 피드백 "채팅이 오면 잘 인식 못 함"
+**진단**: 진짜 원인은 진입 동선상 노출 부족. 워커는 홈에서 채팅 왔는지 알 길이 없고, 점주는 시프트 메인 카드에 unread 표시가 없어 시프트 상세를 열어야만 보임.
+
+**워커 `home.tsx`**
+- "오늘의 매칭" 위젯 안에 흰 배경 빨간 텍스트 칩 `💬 점주 새 메시지 N건` (오렌지 카드 위에 강하게 띔)
+- 빠른 진입 "내 매칭" ✅ 버튼 우상단에 빨간 N 뱃지 (`totalChatUnread = 모든 matches 합산`)
+
+**점주 `owner/shifts.tsx` ShiftCard (메인 리스트)**
+- `hasUnread` 변수 추가
+- 카드 borderColor 우선순위: `hasPending(primary)` > `hasUnread(danger)` > 없음 — 지원자 처리가 채팅보다 더 시급
+- 매칭된 워커 정보 박스 우측에 빨간 `💬 N` 알약 — 탭 → 시프트 상세로 라우팅 (매칭 박스는 부모 Pressable 바깥이라 자체 onPress 필요)
+
+**점주 `owner/shifts.tsx` DashPill (4 알약)**
+- 알약 아래 작은 회색 텍스트 (accent 색) → 빨간 배경 흰 글씨 작은 알약으로 통일
+- 🔥 N (지원도착) / 💬 N (채팅) / ⭐ N (평가대기) 모두 동일하게 강조
+
+### 6. 백엔드 + Metro 기동 운영 메모
+- Spring Boot: `mvnw spring-boot:run` 16.2초, 8090 포트, 클린 부팅
+- Metro 첫 시작 시 PowerShell ExecutionPolicy 가 `npm.ps1` 차단 → Bash 로 우회 (PowerShell 에서는 `npm.cmd` 또는 ExecutionPolicy 변경 필요)
+- conditional require 후 HMR graph traverse `Got unexpected undefined` 에러 → `npm run start -- --clear` 로 cold rebuild
+
+### 잔여 (다음 세션)
+- Phone reload 후 채팅 unread 시각화 실제 동작 확인 (백엔드 chatUnreadCount 응답이 0이 아닐 때만 의미 있음)
+- 워커/점주 빠른 진입 카드 스타일 일관성 — 워커 4버튼(이모지+라벨) vs 점주 QuickLink 세로 카드(이모지+라벨+서브). 의도 여부 사용자 확인 후 통일 결정
+- AWS IAM 키 로테이션 (이전 라운드 잔여)
+- 카카오 도메인 화이트리스트 등록 (이전 라운드 잔여)
+- EAS development build 검토 — Expo Go 한계(푸시) 우회용
+
+---
+
 ## 2026-05-04 — 카카오 통합 + 점주/워커 첫 화면 다듬기 + UI 정돈
 
 ### 1. 카카오 Local API 통합
