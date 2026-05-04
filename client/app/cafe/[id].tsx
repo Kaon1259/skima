@@ -6,6 +6,7 @@ import { Image as ExpoImage } from 'expo-image';
 
 import { initialFor } from '@/components/Avatar';
 import { Icon } from '@/components/Icon';
+import KakaoMapThumbnail from '@/components/KakaoMapThumbnail';
 import { SkeletonCard } from '@/components/Skeleton';
 import { TrustScoreBadge } from '@/components/TrustScoreBadge';
 import { useAuth } from '@/lib/auth';
@@ -205,6 +206,33 @@ export default function CafeDetailScreen() {
               </Pressable>
             </View>
           ) : null}
+          {isOwnerView ? (
+            <View style={{ flexDirection: 'row', gap: 8, marginBottom: spacing.md }}>
+              <Pressable
+                onPress={() => router.push(`/owner/cafes?edit=${cafeId}` as never)}
+                style={({ pressed }) => [
+                  {
+                    flex: 1,
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: 6,
+                    paddingVertical: 11,
+                    borderRadius: radius.md,
+                    borderWidth: 1.5,
+                    borderColor: colors.primary,
+                    backgroundColor: colors.primarySoft,
+                  },
+                  pressed && { opacity: 0.85 },
+                ]}
+              >
+                <Text style={{ fontSize: 14 }}>✏️</Text>
+                <Text style={{ fontSize: 13, fontWeight: '800', color: colors.primaryDark }}>
+                  매장 정보 수정
+                </Text>
+              </Pressable>
+            </View>
+          ) : null}
           <SignalsCard detail={detail} />
           <AboutCard detail={detail} />
           {isOwnerView ? <OwnerMonthCard detail={detail} /> : null}
@@ -340,7 +368,8 @@ function SignalsCard({ detail }: { detail: CafeDetail }) {
 }
 
 function AboutCard({ detail }: { detail: CafeDetail }) {
-  const hasAny = detail.openHours || detail.seatCount != null || detail.phone || detail.description;
+  const hasCoords = detail.latitude != null && detail.longitude != null;
+  const hasAny = detail.openHours || detail.seatCount != null || detail.phone || detail.description || hasCoords;
   if (!hasAny) return null;
   return (
     <View style={[styles.card, { marginBottom: spacing.md }]}>
@@ -362,6 +391,20 @@ function AboutCard({ detail }: { detail: CafeDetail }) {
           <Text style={{ fontSize: 13, color: colors.text, lineHeight: 19 }}>
             {detail.description}
           </Text>
+        </View>
+      ) : null}
+      {hasCoords ? (
+        <View style={{ marginTop: 10 }}>
+          <Text style={{ fontSize: 11, color: colors.textMuted, fontWeight: '700', marginBottom: 6 }}>
+            📍 매장 위치 (탭하면 카카오맵으로 길찾기)
+          </Text>
+          <KakaoMapThumbnail
+            latitude={detail.latitude!}
+            longitude={detail.longitude!}
+            placeName={detail.name}
+            address={detail.address}
+            height={160}
+          />
         </View>
       ) : null}
     </View>

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Alert,
   FlatList,
+  Linking,
   Modal,
   Platform,
   Pressable,
@@ -34,7 +35,7 @@ const TYPE_OPTIONS: { key: CafeType; label: string; emoji: string }[] = [
 ];
 
 export default function OwnerCafesScreen() {
-  const params = useLocalSearchParams<{ autoCreate?: string }>();
+  const params = useLocalSearchParams<{ autoCreate?: string; edit?: string }>();
   const [cafes, setCafes] = useState<Cafe[]>([]);
   const [stats, setStats] = useState<Record<number, CafeStats>>({});
   const [q, setQ] = useState('');
@@ -97,6 +98,17 @@ export default function OwnerCafesScreen() {
       openCreate();
     }
   }, [params.autoCreate, autoTriggered]);
+
+  // edit={cafeId} 쿼리 — cafe 상세에서 "매장 정보 수정" 진입 시 해당 매장 편집 모달 자동 오픈
+  useEffect(() => {
+    if (params.edit && !autoTriggered && cafes.length > 0) {
+      const target = cafes.find((c) => c.id === Number(params.edit));
+      if (target) {
+        setAutoTriggered(true);
+        openEdit(target);
+      }
+    }
+  }, [params.edit, autoTriggered, cafes]);
 
   function notify(msg: string) {
     if (Platform.OS === 'web') window.alert(msg);
@@ -827,7 +839,93 @@ function RegisterForm({
               address={address}
               height={180}
               showGateRadius
+              interactive
+              onCoordsChange={(lat, lng) => {
+                setLatitude(lat);
+                setLongitude(lng);
+              }}
             />
+            {Platform.OS === 'web' ? (
+              <Text style={{ fontSize: 10, color: colors.textMuted, textAlign: 'center' }}>
+                지도에서 마커를 드래그하거나 빈 곳을 탭해 위치를 미세조정하세요
+              </Text>
+            ) : null}
+            {/* 위치 변경 액션 — Web/Native 공통 */}
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
+              <Pressable
+                onPress={() => setKakaoOpen(true)}
+                style={({ pressed }) => [
+                  {
+                    flexGrow: 1,
+                    flexBasis: '30%',
+                    paddingVertical: 8,
+                    paddingHorizontal: 10,
+                    borderRadius: radius.md,
+                    backgroundColor: colors.surface,
+                    borderWidth: 1,
+                    borderColor: colors.border,
+                    alignItems: 'center',
+                    flexDirection: 'row',
+                    justifyContent: 'center',
+                    gap: 4,
+                  },
+                  pressed && { opacity: 0.7 },
+                ]}
+              >
+                <Text style={{ fontSize: 13 }}>🔍</Text>
+                <Text style={{ fontSize: 11, fontWeight: '700', color: colors.text }}>검색으로 변경</Text>
+              </Pressable>
+              <Pressable
+                onPress={fillCurrentLocation}
+                disabled={busyLoc}
+                style={({ pressed }) => [
+                  {
+                    flexGrow: 1,
+                    flexBasis: '30%',
+                    paddingVertical: 8,
+                    paddingHorizontal: 10,
+                    borderRadius: radius.md,
+                    backgroundColor: colors.surface,
+                    borderWidth: 1,
+                    borderColor: colors.border,
+                    alignItems: 'center',
+                    flexDirection: 'row',
+                    justifyContent: 'center',
+                    gap: 4,
+                    opacity: busyLoc ? 0.6 : 1,
+                  },
+                  pressed && { opacity: 0.7 },
+                ]}
+              >
+                <Text style={{ fontSize: 13 }}>📍</Text>
+                <Text style={{ fontSize: 11, fontWeight: '700', color: colors.text }}>
+                  {busyLoc ? '...' : '현재 위치'}
+                </Text>
+              </Pressable>
+              <Pressable
+                onPress={() => Linking.openURL(`https://map.kakao.com/link/map/${encodeURIComponent(name || '매장')},${latitude},${longitude}`)}
+                style={({ pressed }) => [
+                  {
+                    flexGrow: 1,
+                    flexBasis: '30%',
+                    paddingVertical: 8,
+                    paddingHorizontal: 10,
+                    borderRadius: radius.md,
+                    backgroundColor: colors.surface,
+                    borderWidth: 1,
+                    borderColor: colors.border,
+                    alignItems: 'center',
+                    flexDirection: 'row',
+                    justifyContent: 'center',
+                    gap: 4,
+                  },
+                  pressed && { opacity: 0.7 },
+                ]}
+              >
+                <Text style={{ fontSize: 13 }}>🗺</Text>
+                <Text style={{ fontSize: 11, fontWeight: '700', color: colors.text }}>카카오맵 확인</Text>
+              </Pressable>
+            </View>
           </View>
         ) : (
           <View>

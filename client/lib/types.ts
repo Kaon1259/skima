@@ -110,6 +110,8 @@ export type CafeDetail = {
   seatCount?: number | null;
   phone?: string | null;
   description?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
   avgRating: number | null;
   ratingsCount: number | null;
   noShowRate: number | null;

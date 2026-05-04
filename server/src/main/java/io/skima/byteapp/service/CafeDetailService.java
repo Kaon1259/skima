@@ -142,6 +142,8 @@ public class CafeDetailService {
                 cafe.getPhone(),
                 cafe.getDescription(),
                 cafe.getImageUrl(),
+                cafe.getLatitude(),
+                cafe.getLongitude(),
                 avgRating,
                 ratingsCount,
                 noShowRate,

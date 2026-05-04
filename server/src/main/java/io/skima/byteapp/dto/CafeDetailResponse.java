@@ -25,6 +25,9 @@ public record CafeDetailResponse(
         String phone,
         String description,
         String imageUrl,
+        // 매장 좌표 (GPS 출근 게이트 + 지도 표시)
+        Double latitude,
+        Double longitude,
         // 신뢰도 시그널 (워커가 점주에게 준 평가 집계)
         Double avgRating,
         Integer ratingsCount,

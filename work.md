@@ -4,6 +4,82 @@
 
 ---
 
+## 2026-05-04 (4차) — 카카오 매듭 + 매장 위치 수정 UX 보강
+
+### 데이터 초기화
+- 사용자 요청 — 점주 매장 등록 정보 다 초기화
+- 백엔드 재시작 (`mvnw spring-boot:run`) → DataSeeder 의 `wipe + reseed` 실행 (19초)
+- ddl-auto: create + DataSeeder 패턴 — 시드 점주 5 / 워커 4 / admin 1 만 남음
+
+### 카카오 콘솔 도메인 등록 (사용자가 직접 처리)
+- 정확한 경로: 앱 관리 페이지 → [앱] → **[플랫폼 키] → [JavaScript 키] → [JavaScript SDK 도메인]**
+- 등록: `http://localhost:8081`
+- IP 주소(`192.168.0.3:8081`) 는 카카오 정책상 등록 불가 — 도메인 이름만 받음
+- 신규 등록 매장의 web 지도 정상 표시 확인
+
+### KakaoMapThumbnail 인터랙티브 모드
+- props 추가: `interactive`, `onCoordsChange`
+- 인터랙티브 모드 동작 (web only):
+  - iframe `pointerEvents: auto`, map `draggable/scrollwheel: true`, 마커 `draggable: true`
+  - 마커 `dragend` + 지도 `click` 이벤트 → `postMessage({type:'kakao-map-coords', lat, lng})` 부모로 전달
+  - 100m GPS 게이트 원도 좌표 따라 동기 이동 (`gateCircle.setPosition`)
+- 부모 useEffect 가 message 수신 → `onCoordsChange` 호출
+- 우상단 라벨 변경: `🖱 드래그·클릭으로 위치 수정` + borderColor primary 강조
+- 인터랙티브 모드에서 외부 카카오맵 링크 비활성 (실수 클릭 방지)
+
+### 매장 상세 → 편집 진입 흐름 (이전엔 없었음)
+- `cafe/[id].tsx` OwnerView (점주 본인 매장) 에 **"✏️ 매장 정보 수정"** 버튼 추가 (워커 단골/차단 토글 위치와 대칭)
+- 탭 시 `router.push('/owner/cafes?edit={cafeId}')`
+- `owner/cafes.tsx` 가 `edit` query 받아 cafes 로드 후 자동으로 `openEdit(target)` 호출 (autoTriggered 가드)
+
+### 매장 편집 폼 좌표 영역 보강 (Native 친화)
+- 좌표 입력된 경우 영역에 **위치 변경 액션 3개** 추가 (Web + Native 공통):
+  - 🔍 검색으로 변경 — `setKakaoOpen(true)` (카카오 매장 검색 모달)
+  - 📍 현재 위치 — `fillCurrentLocation` (expo-location GPS)
+  - 🗺 카카오맵 확인 — 외부 카카오맵 앱/web (`https://map.kakao.com/link/map/{name},{lat},{lng}`) — Native 에서 정확한 위치 검증용
+- Web 인터랙티브 안내 텍스트 추가: "지도에서 마커를 드래그하거나 빈 곳을 탭해 위치를 미세조정하세요"
+- `Linking` import 추가 (외부 카카오맵 열기)
+
+### Native 좌표 수정 흐름
+1. 매장 상세 → "매장 정보 수정" 탭
+2. 편집 모달 자동 오픈 (좌표 prefill)
+3. 좌표 영역에서 3개 액션:
+   - 카카오 검색으로 매장명 재검색 → 좌표 자동 입력
+   - GPS 현재 위치로 채우기 (점주가 매장에 있을 때)
+   - 외부 카카오맵에서 정확 위치 확인 후 다시 검색
+4. ×버튼으로 좌표 클리어 후 재입력 가능
+
+### 알아두기
+- 좌표 변경 시 React 가 iframe srcDoc 다시 빌드 → 1회 깜박임. 거슬리면 후속 useMemo 안정화 가능
+- Native 는 placeholder + 외부 링크 + 액션 버튼이 한계 — 마커 드래그 같은 시각 인터랙션은 web 전용
+- `cafe/[id].tsx` 매장 상세 OwnerView 의 편집 진입은 첫 라운드 인터랙션. 같은 매장 두 번째 진입은 autoTriggered 가드로 자동 모달 미오픈 — 다음 라운드 ref 패턴으로 픽스 가능
+
+### 매장 상세 화면에 지도 추가 (사용자 요청)
+- 사용자 보고: "매장 상세 누르면 지도는 안 보이네요... 편집일 때는 보입니다" → 매장 상세에도 지도 노출
+- 백엔드: `CafeDetailResponse` 에 `latitude`, `longitude` 필드 추가, `CafeDetailService.buildDetail` 에서 `cafe.getLatitude/Longitude` enrich
+- 클라이언트: `lib/types.ts CafeDetail` 에 좌표 필드 추가
+- `cafe/[id].tsx AboutCard` 에 KakaoMapThumbnail 추가 (좌표 있을 때만, height 160, 인터랙티브 X) + "탭하면 카카오맵 길찾기" 라벨
+- 좌표 없으면 (시드 매장) 미노출 — `hasAny` 조건에 hasCoords 포함
+
+### Native 에서도 지도 표시 (사용자 요청 "앱에서도 확인 가능하게")
+- 사용자 보고: "워커에서도 잘 보이고.. 앱에서도 확인 가능하게 해주세요" → Native placeholder 한계 해소
+- `npx expo install react-native-webview` 로 WebView 추가 (Expo SDK 54 호환 버전 자동 선택)
+- KakaoMapThumbnail Native 분기를 placeholder → **WebView** 로 교체
+  - 같은 iframe HTML 재사용 (`buildIframeHtml(lat, lng, showGate, false)`)
+  - `source={{ html, baseUrl: 'http://localhost:8081/' }}` — 카카오 콘솔 등록 도메인을 baseUrl 로 지정해 SDK 도메인 검증 통과 시도
+  - `pointerEvents="none"` — WebView 자체 인터랙션 차단, 부모 Pressable 이 탭 처리 (외부 카카오맵 링크)
+  - 인터랙티브 모드는 native 에서 비활성 (postMessage 브리지는 web 전용)
+- 동일 라벨 "🗺 카카오맵 열기 →" 우상단 유지
+
+### 잔여 (다음 세션)
+- 카카오 로그인 Redirect URI 등록 (`http://localhost:8081/auth/kakao/callback`) — JavaScript 키 페이지 비어있음
+- 매장 상세 편집 진입 두 번째 자동 모달 안 열림 픽스 (ref 패턴)
+- 시드 매장 좌표 추가 여부 (의도 결정 필요 — 좌표 추가 시 GPS 게이트 자동 활성)
+- Native WebView 도메인 검증 통과 여부 사용자 검증 필요 — baseUrl 만으로 충분한지 OS 별 (iOS WKWebView vs Android WebView)
+- WebView 미설치 환경 fallback 처리 (현재는 require 실패 시 앱 크래시 위험 — 그러나 react-native-webview 가 dev 의존성에 추가됐으니 OK)
+
+---
+
 ## 2026-05-04 (3차) — 추천 시프트 이유 노출 (축 1 매칭 품질)
 
 ### 동기
