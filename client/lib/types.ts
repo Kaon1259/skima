@@ -198,6 +198,8 @@ export type ContractData = {
   classification: string;
   taxClause: string;
   issuedAt: string;
+  ownerAcknowledgedAt?: string | null;
+  workerAcknowledgedAt?: string | null;
 };
 
 export type WithholdingReceipt = {
@@ -245,6 +247,7 @@ export type OwnerShift = Shift & {
   applicationsCount: number;
   pendingApplicationsCount: number;
   matchId?: number | null;
+  matchedWorkerId?: number | null;
   matchedWorkerName?: string | null;
   matchStatus?: 'MATCHED' | 'CHECKED_IN' | 'CHECKED_OUT' | 'NO_SHOW' | 'CANCELED' | null;
   ratingScore?: number | null;
@@ -254,6 +257,8 @@ export type OwnerShift = Shift & {
   payoutApprovedAt?: string | null;
   payoutAutoApproved?: boolean | null;
   payoutCompletedAt?: string | null;
+  ownerContractAckAt?: string | null;
+  workerContractAckAt?: string | null;
   chatUnreadCount?: number;
 };
 
@@ -300,6 +305,7 @@ export type NotificationItem = {
     | 'PAYOUT_REQUESTED'
     | 'NOSHOW_REPORTED'
     | 'SHIFT_CANCELED'
+    | 'WORKER_CONTRACT_ACK'
     | 'FAVORITE_CAFE_NEW_SHIFT';
   title: string;
   subtitle: string;
@@ -366,6 +372,8 @@ export type ShiftMatch = {
   payoutApprovedAt?: string | null;
   payoutAutoApproved?: boolean | null;
   payoutCompletedAt?: string | null;
+  ownerContractAckAt?: string | null;
+  workerContractAckAt?: string | null;
   chatUnreadCount?: number;
 };
 
@@ -431,6 +439,8 @@ export type MyProfile = {
   prefMinCafeRating?: number | null;
   prefMaxCafeNoShowRate?: number | null;
   profileImage?: string | null;
+  phone?: string | null;
+  bankAccount?: string | null;
   healthCertImage?: string | null;
   healthCertStatus?: HealthCertStatus | null;
   healthCertUploadedAt?: string | null;
@@ -544,6 +554,7 @@ export type Payout = {
   completedAt?: string | null;
   status: 'REQUESTED' | 'SCHEDULED' | 'COMPLETED' | 'FAILED';
   elapsedMinutes?: number | null;
+  ownerContractAckAt?: string | null;
 };
 
 export type Kpi = {

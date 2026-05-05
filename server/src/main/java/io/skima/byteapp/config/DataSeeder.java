@@ -97,19 +97,23 @@ public class DataSeeder implements CommandLineRunner {
                     .build()));
         }
 
-        // 4 cafes — 종류 다양 (프렌차이즈 카페 / 베이커리 / 개인)
+        // 4 cafes — 종류 다양 (프렌차이즈 카페 / 베이커리 / 개인). 좌표는 카카오맵 데모용 임의 값
         Cafe cafe1 = cafeRepository.save(Cafe.builder()
                 .owner(owner1).name("메가MGC커피 강남역점").address("서울 강남구 강남대로 123")
-                .cafeType(CafeType.FRANCHISE_CAFE).brandKey("mega").build());
+                .cafeType(CafeType.FRANCHISE_CAFE).brandKey("mega")
+                .latitude(37.4979).longitude(127.0276).build());
         Cafe cafe2 = cafeRepository.save(Cafe.builder()
                 .owner(owner1).name("메가MGC커피 역삼점").address("서울 강남구 역삼로 45")
-                .cafeType(CafeType.FRANCHISE_CAFE).brandKey("mega").build());
+                .cafeType(CafeType.FRANCHISE_CAFE).brandKey("mega")
+                .latitude(37.5006).longitude(127.0367).build());
         Cafe cafe3 = cafeRepository.save(Cafe.builder()
                 .owner(owner2).name("컴포즈커피 홍대점").address("서울 마포구 홍익로 78")
-                .cafeType(CafeType.FRANCHISE_CAFE).brandKey("compose").build());
+                .cafeType(CafeType.FRANCHISE_CAFE).brandKey("compose")
+                .latitude(37.5547).longitude(126.9237).build());
         Cafe cafe4 = cafeRepository.save(Cafe.builder()
                 .owner(owner3).name("파리바게뜨 신촌점").address("서울 서대문구 연세로 90")
-                .cafeType(CafeType.FRANCHISE_BAKERY).brandKey("parisbaguette").build());
+                .cafeType(CafeType.FRANCHISE_BAKERY).brandKey("parisbaguette")
+                .latitude(37.5573).longitude(126.9389).build());
 
         if (!props.getSeed().isCreateShiftsAndApps()) {
             log.info("[SEED] done — users + cafes only (skima.seed.create-shifts-and-apps=false)");

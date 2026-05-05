@@ -4,6 +4,7 @@ import { router } from 'expo-router';
 import { ChatSheet } from '@/components/ChatSheet';
 import { DisputeModal } from '@/components/DisputeModal';
 import { EmptyState } from '@/components/EmptyState';
+import { GradientButton } from '@/components/Gradient';
 import { Icon } from '@/components/Icon';
 import { RatingModal, blurFocusedForModal } from '@/components/RatingModal';
 import { SkeletonList } from '@/components/Skeleton';
@@ -190,8 +191,47 @@ export default function WorkerMatchesScreen() {
                 </View>
               </View>
 
+              {/* 근로계약서 미확인 강조 — 매칭 직후 가장 먼저 봐야 할 액션 */}
+              {item.status !== 'CANCELED' && !item.workerContractAckAt ? (
+                <Pressable
+                  onPress={() => router.push(`/contract/${item.id}` as never)}
+                  style={({ pressed }) => [
+                    {
+                      marginTop: 10,
+                      paddingVertical: 12,
+                      paddingHorizontal: 14,
+                      borderRadius: radius.md,
+                      backgroundColor: colors.warnSoft,
+                      borderWidth: 1.5,
+                      borderColor: colors.warn,
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      gap: 10,
+                    },
+                    pressed && { opacity: 0.85 },
+                  ]}
+                >
+                  <Text style={{ fontSize: 22 }}>📄</Text>
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ fontSize: 13, fontWeight: '900', color: colors.warn }}>
+                      근로계약서 확인 필요
+                    </Text>
+                    <Text style={{ fontSize: 11, color: colors.text, marginTop: 2 }}>
+                      근로조건·시급·근무시간 미리 확인하세요
+                    </Text>
+                  </View>
+                  <Text style={{ fontSize: 12, fontWeight: '700', color: colors.warn }}>확인 ›</Text>
+                </Pressable>
+              ) : null}
+
               <View style={{ marginTop: 12, paddingTop: 12, borderTopWidth: 1, borderTopColor: colors.border }}>
                 <TimelineDot done label="매칭 확정" time={item.matchedAt} />
+                <TimelineDot
+                  done={!!item.workerContractAckAt}
+                  label={item.workerContractAckAt ? '근로계약서 확인 완료' : '근로계약서 확인 대기'}
+                  time={item.workerContractAckAt}
+                  sub={item.ownerContractAckAt ? '점주도 확인함' : '점주 확인 대기 중'}
+                />
                 <TimelineDot done={!!item.checkInAt} label="출근 체크인" time={item.checkInAt} />
                 <TimelineDot done={!!item.checkOutAt} label="퇴근 체크아웃" time={item.checkOutAt} />
                 <TimelineDot
@@ -259,18 +299,22 @@ export default function WorkerMatchesScreen() {
               ) : null}
 
               {item.status === 'MATCHED' ? (
-                <Pressable
-                  style={({ pressed }) => [
-                    styles.buttonPrimary,
-                    { marginTop: 14, flexDirection: 'row', gap: 6 },
-                    (busyId === item.id || pressed) && { opacity: 0.85 },
-                  ]}
-                  onPress={() => checkIn(item.id)}
-                  disabled={busyId === item.id}
-                >
-                  <Icon name="log-in" size={16} color="#fff" />
-                  <Text style={styles.buttonPrimaryText}>출근 체크인</Text>
-                </Pressable>
+                <View style={{ marginTop: 14 }}>
+                  <GradientButton
+                    onPress={() => {
+                      if (!item.workerContractAckAt) {
+                        // 게이트: ack 없으면 계약서 화면으로 강제 라우팅 (서명 후 매칭 화면 복귀해 다시 체크인)
+                        notify('근로계약서를 먼저 확인해주세요. 확인 화면으로 이동합니다.');
+                        router.push(`/contract/${item.id}?focus=ack` as never);
+                        return;
+                      }
+                      checkIn(item.id);
+                    }}
+                    disabled={busyId === item.id}
+                    label={item.workerContractAckAt ? '출근 체크인' : '📄 계약서 확인 후 출근'}
+                    icon={<Icon name="log-in" size={16} color="#fff" />}
+                  />
+                </View>
               ) : null}
 
               {item.status === 'CHECKED_IN' ? (
@@ -308,17 +352,13 @@ export default function WorkerMatchesScreen() {
                     </Text>
                   </View>
                 ) : (
-                  <Pressable
-                    style={({ pressed }) => [
-                      styles.buttonPrimary,
-                      { marginTop: 14, backgroundColor: colors.warn, flexDirection: 'row', gap: 6 },
-                      pressed && { opacity: 0.85 },
-                    ]}
-                    onPress={() => openRating(item)}
-                  >
-                    <Icon name="star" size={16} color="#fff" />
-                    <Text style={styles.buttonPrimaryText}>매장 평가하기</Text>
-                  </Pressable>
+                  <View style={{ marginTop: 14 }}>
+                    <GradientButton
+                      onPress={() => openRating(item)}
+                      label="매장 평가하기"
+                      icon={<Icon name="star" size={16} color="#fff" />}
+                    />
+                  </View>
                 )
               ) : null}
 

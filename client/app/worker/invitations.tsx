@@ -3,6 +3,7 @@ import { Alert, FlatList, Platform, Pressable, RefreshControl, Text, View } from
 import { router, useFocusEffect } from 'expo-router';
 
 import { EmptyState } from '@/components/EmptyState';
+import { GradientButton } from '@/components/Gradient';
 import { api } from '@/lib/api';
 import { ShiftInvitationItem, fmtDateTime, fmtKRW } from '@/lib/types';
 import { colors, radius, spacing, styles } from '@/lib/theme';
@@ -176,19 +177,13 @@ export default function WorkerInvitationsScreen() {
             >
               <Text style={[styles.buttonSecondaryText, { color: colors.danger }]}>거절</Text>
             </Pressable>
-            <Pressable
-              onPress={() => accept(item)}
-              disabled={busyId === item.id}
-              style={[
-                styles.buttonPrimary,
-                { flex: 2, backgroundColor: colors.success },
-                busyId === item.id && { opacity: 0.6 },
-              ]}
-            >
-              <Text style={styles.buttonPrimaryText}>
-                {busyId === item.id ? '처리 중...' : '✅ 수락 — 1탭 매칭'}
-              </Text>
-            </Pressable>
+            <View style={{ flex: 2 }}>
+              <GradientButton
+                onPress={() => accept(item)}
+                disabled={busyId === item.id}
+                label={busyId === item.id ? '처리 중...' : '✅ 수락 — 1탭 매칭'}
+              />
+            </View>
           </View>
 
           <Pressable

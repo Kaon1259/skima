@@ -15,6 +15,7 @@ import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 
 import { Image as ExpoImage } from 'expo-image';
 
+import { GradientButton } from '@/components/Gradient';
 import { Icon } from '@/components/Icon';
 import KakaoMapThumbnail from '@/components/KakaoMapThumbnail';
 import KakaoPlaceSearchModal, { KakaoPlace as KakaoPlaceData } from '@/components/KakaoPlaceSearchModal';
@@ -300,13 +301,14 @@ export default function OwnerCafesScreen() {
         ListEmptyComponent={
           <View style={{ paddingTop: 60, alignItems: 'center' }}>
             <Text style={{ fontSize: 36, marginBottom: 8 }}>🏪</Text>
-            <Text style={styles.bodyMuted}>등록된 매장이 없어요</Text>
-            <Pressable
-              style={[styles.buttonPrimary, { marginTop: 16, paddingHorizontal: 24 }]}
-              onPress={openCreate}
-            >
-              <Text style={styles.buttonPrimaryText}>첫 매장 등록</Text>
-            </Pressable>
+            <Text style={[styles.bodyMuted, { marginBottom: 16 }]}>등록된 매장이 없어요</Text>
+            <View style={{ minWidth: 200 }}>
+              <GradientButton
+                onPress={openCreate}
+                label="첫 매장 등록"
+                size="md"
+              />
+            </View>
           </View>
         }
         renderItem={({ item }) => (

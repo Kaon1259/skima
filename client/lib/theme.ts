@@ -1,11 +1,24 @@
 import { Platform, StyleSheet } from 'react-native';
 
 // Timee-inspired vibrant orange + clean light surfaces
+// 단바 brand orange — 9-step palette (Tailwind-style)
 export const colors = {
-  // Brand
+  // Brand — orange palette (use these for brand surfaces, washes, accents)
+  primary50: '#FFF7F2',   // 가장 연한 — 헤더 wash, hover bg
+  primary100: '#FFEEE2',  // soft 칩 배경
+  primary200: '#FFD9BC',
+  primary300: '#FFB890',
+  primary400: '#FF935E',
+  primary500: '#FF6B35',  // = primary (CTA, 강조)
+  primary600: '#E55A28',  // = primaryDark (그라디언트 끝)
+  primary700: '#C44619',
+  primary800: '#9C320E',
+  primary900: '#7A2208',
+
+  // Aliases (호환 유지 — 기존 코드는 primary/primaryDark/primarySoft 사용 중)
   primary: '#FF6B35',
   primaryDark: '#E55A28',
-  primarySoft: '#FFF1EA',
+  primarySoft: '#FFEEE2',
 
   // Surface
   bg: '#FFFFFF',
@@ -31,6 +44,13 @@ export const colors = {
   dangerSoft: '#FEECEC',
   info: '#3B82F6',
   infoSoft: '#EAF2FE',
+};
+
+// Brand gradient — hero 카드, 메인 CTA 등에서 사용
+export const gradients = {
+  brand: ['#FF6B35', '#E55A28'] as [string, string],
+  brandWarm: ['#FF8A3D', '#FF5A1F'] as [string, string],
+  brandSoft: ['#FFEEE2', '#FFF7F2'] as [string, string],
 };
 
 export const radius = {

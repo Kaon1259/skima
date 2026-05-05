@@ -87,6 +87,25 @@ public class NotificationService {
             });
         }
 
+        // 2-1) 워커가 근로계약서 확인 — 점주도 확인하라는 알림 (대칭 동선)
+        for (Shift s : myShifts) {
+            matchRepository.findActiveByShiftId(s.getId()).ifPresent(m -> {
+                if (m.getWorkerAcknowledgedContractAt() != null
+                        && m.getOwnerAcknowledgedContractAt() == null
+                        && m.getStatus() != MatchStatus.NO_SHOW
+                        && m.getStatus() != MatchStatus.CANCELED) {
+                    raws.add(new Raw(
+                            "WORKER_CONTRACT_ACK",
+                            m.getWorker().getName() + " 워커가 근로계약서 확인",
+                            s.getCafe().getName() + " · 점주 확인 필요 (정산 전 필수)",
+                            "/owner/contract/" + m.getId() + "?focus=ack",
+                            m.getId(),
+                            m.getWorkerAcknowledgedContractAt(),
+                            "warn"));
+                }
+            });
+        }
+
         // 3) 정산 승인 + 평가 대기 — Payout REQUESTED 상태인 매칭
         for (Shift s : myShifts) {
             matchRepository.findActiveByShiftId(s.getId()).ifPresent(m -> {

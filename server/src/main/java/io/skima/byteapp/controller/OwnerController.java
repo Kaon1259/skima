@@ -185,6 +185,7 @@ public class OwnerController {
                             .count();
 
                     Long matchId = null;
+                    Long matchedWorkerId = null;
                     String matchedWorkerName = null;
                     String matchStatus = null;
                     Integer ratingScore = null;
@@ -194,14 +195,19 @@ public class OwnerController {
                     java.time.LocalDateTime payoutApprovedAt = null;
                     Boolean payoutAutoApproved = null;
                     java.time.LocalDateTime payoutCompletedAt = null;
+                    java.time.LocalDateTime ownerAckAt = null;
+                    java.time.LocalDateTime workerAckAt = null;
                     long chatUnread = 0;
 
                     var matchOpt = matchRepository.findActiveByShiftId(s.getId());
                     if (matchOpt.isPresent()) {
                         var m = matchOpt.get();
                         matchId = m.getId();
+                        matchedWorkerId = m.getWorker().getId();
                         matchedWorkerName = m.getWorker().getName();
                         matchStatus = m.getStatus().name();
+                        ownerAckAt = m.getOwnerAcknowledgedContractAt();
+                        workerAckAt = m.getWorkerAcknowledgedContractAt();
                         var ratingOpt = ratingRepository.findByMatchIdAndDirection(
                                 m.getId(), RatingDirection.OWNER_TO_WORKER);
                         if (ratingOpt.isPresent()) {
@@ -227,9 +233,10 @@ public class OwnerController {
                     }
 
                     return OwnerShiftView.from(s, total, pending,
-                            matchId, matchedWorkerName, matchStatus,
+                            matchId, matchedWorkerId, matchedWorkerName, matchStatus,
                             ratingScore, willRehire, workerRatedOwner,
                             payoutStatus, payoutApprovedAt, payoutAutoApproved, payoutCompletedAt,
+                            ownerAckAt, workerAckAt,
                             chatUnread);
                 })
                 .toList();
@@ -278,6 +285,16 @@ public class OwnerController {
                                              @PathVariable Long matchId,
                                              @Valid @RequestBody RatingCreateRequest req) {
         var owner = principal.getDomainUser();
+        // 근로계약서 강제 게이트 — ack 안 했으면 정산 승인 거부 (워커 체크인 게이트와 대칭)
+        var match = matchRepository.findById(matchId)
+                .orElseThrow(() -> new IllegalArgumentException("매칭을 찾을 수 없어요"));
+        if (!match.getShift().getCafe().getOwner().getId().equals(owner.getId())) {
+            throw new IllegalStateException("본인 매장 매칭이 아닙니다");
+        }
+        if (match.getOwnerAcknowledgedContractAt() == null) {
+            throw io.skima.byteapp.common.BusinessException.badRequest(
+                    "정산 승인 전 근로계약서 확인이 필요합니다. '근로계약서 확인' 배너를 탭해 동의 후 다시 시도해주세요.");
+        }
         var rating = ratingService.rateByOwner(owner, matchId, req);
         var payout = payoutService.approveByOwner(owner, matchId);
         return Map.of(
@@ -356,6 +373,24 @@ public class OwnerController {
     public ContractResponse contract(@AuthenticationPrincipal AuthUser principal,
                                      @PathVariable Long matchId) {
         return complianceService.buildContract(principal.getDomainUser(), matchId);
+    }
+
+    /** 점주 측 근로계약서 확인 동의 — 본인 매장 매칭만, 1회 기록 */
+    @PostMapping("/matches/{matchId}/contract/ack")
+    @org.springframework.transaction.annotation.Transactional
+    public Map<String, Object> ackContract(@AuthenticationPrincipal AuthUser principal,
+                                            @PathVariable Long matchId) {
+        var m = matchRepository.findById(matchId)
+                .orElseThrow(() -> new IllegalArgumentException("매칭을 찾을 수 없어요"));
+        if (!m.getShift().getCafe().getOwner().getId().equals(principal.getDomainUser().getId())) {
+            throw new IllegalStateException("본인 매장 매칭이 아닙니다");
+        }
+        m.acknowledgeContractByOwner(java.time.LocalDateTime.now());
+        Map<String, Object> result = new HashMap<>();
+        result.put("ownerAcknowledgedContractAt", m.getOwnerAcknowledgedContractAt().toString());
+        result.put("workerAcknowledgedContractAt",
+                m.getWorkerAcknowledgedContractAt() != null ? m.getWorkerAcknowledgedContractAt().toString() : null);
+        return result;
     }
 
     @GetMapping("/matches/{matchId}/withholding")

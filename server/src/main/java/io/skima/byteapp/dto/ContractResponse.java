@@ -31,6 +31,9 @@ public record ContractResponse(
         // 메타
         String classification,
         String taxClause,
-        LocalDateTime issuedAt
+        LocalDateTime issuedAt,
+        // 양측 확인 시각 (B 트랙 — 분쟁 방어)
+        LocalDateTime ownerAcknowledgedAt,
+        LocalDateTime workerAcknowledgedAt
 ) {
 }

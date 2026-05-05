@@ -83,7 +83,7 @@ export default function WorkerPayoutsScreen() {
               </View>
             </View>
 
-            <Text style={[styles.bigNumber, { color: colors.success, marginTop: 8, fontSize: 40 }]}>
+            <Text style={[styles.bigNumber, { color: colors.primary, marginTop: 8, fontSize: 40 }]}>
               {fmtKRW(item.netAmount)}
             </Text>
 

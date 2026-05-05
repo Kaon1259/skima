@@ -2,6 +2,7 @@ import { useCallback, useState } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { router } from 'expo-router';
 
+import { GradientCard } from '@/components/Gradient';
 import { api } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { useFocusPolling } from '@/lib/useFocusPolling';
@@ -186,40 +187,30 @@ export function WorkerHomeWidgets() {
         </Pressable>
       ) : null}
 
-      {/* 위젯 1 — 오늘 매칭 (있을 때만) */}
+      {/* 위젯 1 — 오늘 매칭 (hero 그라디언트, 있을 때만) */}
       {todayMatch ? (
-        <Pressable
+        <GradientCard
           onPress={() => router.push(`/worker/matches?focus=${todayMatch.id}` as never)}
-          style={({ pressed }) => [
-            {
-              padding: 16,
-              borderRadius: radius.lg,
-              backgroundColor: colors.primary,
-              borderWidth: 1,
-              borderColor: colors.primary,
-              marginBottom: spacing.md,
-            },
-            pressed && { opacity: 0.9 },
-          ]}
+          style={{ padding: 18, marginBottom: spacing.md }}
         >
           <Text style={{ fontSize: 11, fontWeight: '800', color: 'rgba(255,255,255,0.85)', letterSpacing: 0.5 }}>
             오늘의 매칭
           </Text>
-          <Text style={{ fontSize: 22, fontWeight: '900', color: '#fff', marginTop: 4 }}>
+          <Text style={{ fontSize: 22, fontWeight: '900', color: '#fff', marginTop: 4, letterSpacing: -0.5 }}>
             {todayMatch.cafeName ?? '매장'}
           </Text>
-          <Text style={{ fontSize: 13, color: 'rgba(255,255,255,0.9)', marginTop: 4 }}>
+          <Text style={{ fontSize: 13, color: 'rgba(255,255,255,0.92)', marginTop: 4 }}>
             {todayMatch.shiftStartAt ? fmtDateTime(todayMatch.shiftStartAt) : '시간 미정'}
             {todayMatch.shiftEndAt ? ` ~ ${fmtDateTime(todayMatch.shiftEndAt)}` : ''}
             {' · '}
             {todayMatch.status === 'CHECKED_IN' ? '근무중' : todayMatch.status === 'MATCHED' ? '시작 대기' : todayMatch.status}
           </Text>
-          <Text style={{ fontSize: 11, color: 'rgba(255,255,255,0.85)', marginTop: 8, fontWeight: '700' }}>
+          <Text style={{ fontSize: 11, color: 'rgba(255,255,255,0.85)', marginTop: 10, fontWeight: '700' }}>
             {todayMatch.status === 'CHECKED_IN'
               ? '👉 탭해서 체크아웃 / 채팅'
               : '👉 탭해서 체크인 / 채팅'}
           </Text>
-        </Pressable>
+        </GradientCard>
       ) : null}
 
       {/* 위젯 2 — 다음 매칭 */}
@@ -256,7 +247,7 @@ export function WorkerHomeWidgets() {
         </Pressable>
       ) : null}
 
-      {/* 위젯 3 — 이번주 수입 + 위젯 4 — 평점/단골 (가로 2개, 데이터 있을 때만) */}
+      {/* 위젯 3 — 이번주 수입 + 위젯 4 — 평점/단골 (오렌지 톤 통일) */}
       {weekIncome > 0 || (stats?.ratingsCount ?? 0) > 0 || favCount > 0 ? (
         <View style={{ flexDirection: 'row', gap: 8, marginBottom: spacing.md }}>
           <Pressable
@@ -266,18 +257,18 @@ export function WorkerHomeWidgets() {
                 flex: 1,
                 padding: 14,
                 borderRadius: radius.md,
-                backgroundColor: colors.successSoft,
+                backgroundColor: colors.primary50,
                 borderWidth: 1,
-                borderColor: colors.success,
+                borderColor: colors.primary200,
               },
               pressed && { opacity: 0.85 },
             ]}
           >
-            <Text style={{ fontSize: 11, fontWeight: '800', color: colors.success }}>이번주 받을 돈</Text>
-            <Text style={{ fontSize: 22, fontWeight: '900', color: colors.success, marginTop: 6, letterSpacing: -0.5 }}>
+            <Text style={{ fontSize: 11, fontWeight: '800', color: colors.primary700, letterSpacing: 0.3 }}>이번주 받을 돈</Text>
+            <Text style={{ fontSize: 22, fontWeight: '900', color: colors.primary, marginTop: 6, letterSpacing: -0.5 }}>
               {fmtKRW(weekIncome)}
             </Text>
-            <Text style={{ fontSize: 10, color: colors.text, marginTop: 4 }}>
+            <Text style={{ fontSize: 10, color: colors.textSubtle, marginTop: 4 }}>
               {weekIncomeStatusCount.pending > 0
                 ? `정산 진행중 ${weekIncomeStatusCount.pending}건`
                 : weekIncomeStatusCount.completed > 0
@@ -293,18 +284,18 @@ export function WorkerHomeWidgets() {
                 flex: 1,
                 padding: 14,
                 borderRadius: radius.md,
-                backgroundColor: colors.warnSoft,
+                backgroundColor: colors.primary100,
                 borderWidth: 1,
-                borderColor: colors.warn,
+                borderColor: colors.primary300,
               },
               pressed && { opacity: 0.85 },
             ]}
           >
-            <Text style={{ fontSize: 11, fontWeight: '800', color: colors.warn }}>내 평점 · 단골</Text>
-            <Text style={{ fontSize: 22, fontWeight: '900', color: colors.warn, marginTop: 6 }}>
+            <Text style={{ fontSize: 11, fontWeight: '800', color: colors.primary700, letterSpacing: 0.3 }}>내 평점 · 단골</Text>
+            <Text style={{ fontSize: 22, fontWeight: '900', color: colors.primaryDark, marginTop: 6 }}>
               {stats?.avgRating != null ? `★ ${stats.avgRating.toFixed(1)}` : '★ —'}
             </Text>
-            <Text style={{ fontSize: 10, color: colors.text, marginTop: 4 }}>
+            <Text style={{ fontSize: 10, color: colors.textSubtle, marginTop: 4 }}>
               평가 {stats?.ratingsCount ?? 0}개 · 단골 {favCount}곳
             </Text>
           </Pressable>
@@ -327,16 +318,16 @@ export function WorkerHomeWidgets() {
                     paddingVertical: 12,
                     paddingHorizontal: 14,
                     borderRadius: radius.md,
-                    backgroundColor: colors.successSoft,
+                    backgroundColor: colors.primary50,
                     borderWidth: 1.5,
-                    borderColor: colors.success,
+                    borderColor: colors.primary,
                     minWidth: 200,
                     maxWidth: 260,
                   },
                   pressed && { opacity: 0.85 },
                 ]}
               >
-                <Text style={{ fontSize: 13, fontWeight: '800', color: colors.success }} numberOfLines={1}>
+                <Text style={{ fontSize: 13, fontWeight: '800', color: colors.primaryDark }} numberOfLines={1}>
                   {it.title}
                 </Text>
                 <Text style={{ fontSize: 11, color: colors.text, marginTop: 4 }} numberOfLines={2}>

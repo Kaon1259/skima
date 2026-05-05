@@ -3,6 +3,7 @@ import { Alert, FlatList, Platform, Pressable, RefreshControl, Text, View } from
 import { router, useFocusEffect } from 'expo-router';
 
 import { Avatar } from '@/components/Avatar';
+import { GradientCard } from '@/components/Gradient';
 import { Icon } from '@/components/Icon';
 import { WorkerHomeWidgets } from '@/components/WorkerHomeWidgets';
 import { WorkerTierBadge } from '@/components/WorkerTierBadge';
@@ -150,57 +151,71 @@ export default function WorkerMyPageScreen() {
           {/* 오늘 매칭 / 다음 매칭 / 단골 매장 새 시프트 / 점주 직접 호출 등 — 시프트 화면에서 옮겨옴 */}
           <WorkerHomeWidgets />
 
-          {/* 프로필 헤더 */}
-          <View style={{ marginBottom: spacing.lg, flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-            <Pressable
-              onPress={handleUploadPhoto}
-              disabled={busyPhoto}
-              style={({ pressed }) => [pressed && { opacity: 0.7 }]}
-            >
-              <Avatar
-                name={auth?.name ?? '워커'}
-                imageUrl={me?.profileImage}
-                size={56}
-              />
-            </Pressable>
-            <View style={{ flex: 1 }}>
-              <Text style={[styles.h2, { fontSize: 20 }]}>{auth?.name ?? '워커'}</Text>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4, flexWrap: 'wrap' }}>
-                <WorkerTierBadge tier={stats?.tier} size="md" />
-                {me?.selfReportedLevel ? (
-                  <View style={{
-                    paddingHorizontal: 6, paddingVertical: 2,
-                    borderRadius: radius.pill, backgroundColor: colors.primarySoft,
-                  }}>
-                    <Text style={{ fontSize: 10, fontWeight: '900', color: colors.primaryDark }}>
-                      {SKILL_LEVEL_LABEL[me.selfReportedLevel as SkillLevel]?.short ?? me.selfReportedLevel}
+          {/* 프로필 hero — 오렌지 그라디언트 카드 */}
+          <GradientCard style={{ padding: 18, marginBottom: spacing.lg }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
+              <Pressable
+                onPress={handleUploadPhoto}
+                disabled={busyPhoto}
+                style={({ pressed }) => [pressed && { opacity: 0.7 }]}
+              >
+                <View
+                  style={{
+                    borderWidth: 2,
+                    borderColor: 'rgba(255,255,255,0.6)',
+                    borderRadius: 999,
+                    padding: 2,
+                  }}
+                >
+                  <Avatar
+                    name={auth?.name ?? '워커'}
+                    imageUrl={me?.profileImage}
+                    size={56}
+                  />
+                </View>
+              </Pressable>
+              <View style={{ flex: 1 }}>
+                <Text style={{ fontSize: 22, fontWeight: '900', color: '#fff', letterSpacing: -0.5 }}>
+                  {auth?.name ?? '워커'}
+                </Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 6, flexWrap: 'wrap' }}>
+                  <WorkerTierBadge tier={stats?.tier} size="md" />
+                  {me?.selfReportedLevel ? (
+                    <View style={{
+                      paddingHorizontal: 7, paddingVertical: 2,
+                      borderRadius: radius.pill, backgroundColor: 'rgba(255,255,255,0.92)',
+                    }}>
+                      <Text style={{ fontSize: 10, fontWeight: '900', color: colors.primaryDark }}>
+                        {SKILL_LEVEL_LABEL[me.selfReportedLevel as SkillLevel]?.short ?? me.selfReportedLevel}
+                      </Text>
+                    </View>
+                  ) : (
+                    <Text style={{ fontSize: 11, color: 'rgba(255,255,255,0.85)' }}>등급 미설정</Text>
+                  )}
+                  {me?.experienceYears != null ? (
+                    <Text style={{ fontSize: 11, color: 'rgba(255,255,255,0.85)' }}>
+                      · 경력 {me.experienceYears}년
                     </Text>
-                  </View>
-                ) : (
-                  <Text style={{ fontSize: 11, color: colors.textMuted }}>등급 미설정</Text>
-                )}
-                {me?.experienceYears != null ? (
-                  <Text style={{ fontSize: 11, color: colors.textMuted }}>
-                    · 경력 {me.experienceYears}년
-                  </Text>
-                ) : null}
+                  ) : null}
+                </View>
               </View>
+              <Pressable
+                onPress={() => logout()}
+                hitSlop={6}
+                style={({ pressed }) => [
+                  {
+                    paddingHorizontal: 10, paddingVertical: 6,
+                    borderRadius: radius.pill,
+                    borderWidth: 1, borderColor: 'rgba(255,255,255,0.5)',
+                    backgroundColor: 'rgba(255,255,255,0.12)',
+                  },
+                  pressed && { opacity: 0.7 },
+                ]}
+              >
+                <Text style={{ fontSize: 11, fontWeight: '700', color: '#fff' }}>로그아웃</Text>
+              </Pressable>
             </View>
-            <Pressable
-              onPress={() => logout()}
-              hitSlop={6}
-              style={({ pressed }) => [
-                {
-                  paddingHorizontal: 10, paddingVertical: 6,
-                  borderRadius: radius.pill,
-                  borderWidth: 1, borderColor: colors.border,
-                },
-                pressed && { opacity: 0.7 },
-              ]}
-            >
-              <Text style={{ fontSize: 11, fontWeight: '700', color: colors.textMuted }}>로그아웃</Text>
-            </Pressable>
-          </View>
+          </GradientCard>
 
           {/* 프로필 편집 진입 — 큰 CTA */}
           <Pressable
@@ -322,7 +337,7 @@ export default function WorkerMyPageScreen() {
                     onPress={() => handleUpdatePrefs({ minCafeRating: v })}
                     style={[
                       styles.chip,
-                      active && { backgroundColor: colors.warn, borderColor: colors.warn },
+                      active && { backgroundColor: colors.primary, borderColor: colors.primary },
                     ]}
                   >
                     <Text style={[styles.chipText, active && { color: '#fff' }]}>
@@ -386,12 +401,12 @@ export default function WorkerMyPageScreen() {
             </Text>
           </View>
 
-          {/* 요약 카드들 */}
+          {/* 요약 카드들 — 누적 수입만 brand 강조, 나머지는 정보성 */}
           <Text style={[styles.subtitle, { fontWeight: '800', marginBottom: 8, marginTop: 8 }]}>누적 통계</Text>
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
-            <SummaryCard label="누적 근무" value={`${totalHours}시간`} fg={colors.primaryDark} />
-            <SummaryCard label="누적 수입" value={fmtKRW(stats?.totalEarnings ?? 0)} fg={colors.success} />
-            <SummaryCard label="총 매칭" value={`${stats?.totalMatches ?? 0}건`} fg={colors.info} />
+            <SummaryCard label="누적 근무" value={`${totalHours}시간`} fg={colors.text} />
+            <SummaryCard label="누적 수입" value={fmtKRW(stats?.totalEarnings ?? 0)} fg={colors.primary} highlight />
+            <SummaryCard label="총 매칭" value={`${stats?.totalMatches ?? 0}건`} fg={colors.text} />
             <SummaryCard label="완료" value={`${stats?.completedMatches ?? 0}건`} fg={colors.text} />
           </View>
 
@@ -654,17 +669,18 @@ function MonthlyIncomeChart({ payouts }: { payouts: Payout[] }) {
   );
 }
 
-function SummaryCard({ label, value, fg }: { label: string; value: string; fg: string }) {
+function SummaryCard({ label, value, fg, highlight }: { label: string; value: string; fg: string; highlight?: boolean }) {
   return (
     <View
       style={{
         flexBasis: '47%', flexGrow: 1,
         padding: 14, borderRadius: radius.lg,
-        backgroundColor: colors.surface,
-        borderWidth: 1, borderColor: colors.border,
+        backgroundColor: highlight ? colors.primary50 : colors.surface,
+        borderWidth: 1,
+        borderColor: highlight ? colors.primary200 : colors.border,
       }}
     >
-      <Text style={{ fontSize: 11, color: colors.textMuted, fontWeight: '700' }}>{label}</Text>
+      <Text style={{ fontSize: 11, color: highlight ? colors.primary700 : colors.textMuted, fontWeight: '700', letterSpacing: 0.3 }}>{label}</Text>
       <Text style={{ fontSize: 22, fontWeight: '900', color: fg, marginTop: 6, letterSpacing: -0.5 }}>
         {value}
       </Text>

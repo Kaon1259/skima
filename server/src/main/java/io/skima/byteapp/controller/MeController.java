@@ -41,6 +41,8 @@ public class MeController {
         body.put("prefMinCafeRating", u.getPrefMinCafeRating());
         body.put("prefMaxCafeNoShowRate", u.getPrefMaxCafeNoShowRate());
         body.put("profileImage", u.getProfileImage());
+        body.put("phone", u.getPhone());
+        body.put("bankAccount", u.getBankAccount());
         body.put("healthCertImage", u.getHealthCertImage());
         body.put("healthCertStatus", u.getHealthCertStatus() == null ? null : u.getHealthCertStatus().name());
         body.put("healthCertUploadedAt", u.getHealthCertUploadedAt());
@@ -63,6 +65,9 @@ public class MeController {
         }
         if (Boolean.TRUE.equals(req.updatePrefs())) {
             u.updateWorkerPrefs(req.prefMinWage(), req.prefMinCafeRating(), req.prefMaxCafeNoShowRate());
+        }
+        if (Boolean.TRUE.equals(req.updateBankAccount())) {
+            u.updateBankAccount(req.bankAccount());
         }
         return me(principal);
     }

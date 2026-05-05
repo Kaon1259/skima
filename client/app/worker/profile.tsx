@@ -28,6 +28,7 @@ export default function MyProfileEditScreen() {
   const [bio, setBio] = useState('');
   const [experienceYears, setExperienceYears] = useState('');
   const [availableHours, setAvailableHours] = useState('');
+  const [bankAccount, setBankAccount] = useState('');
   const [busy, setBusy] = useState(false);
 
   function notify(msg: string) {
@@ -46,6 +47,7 @@ export default function MyProfileEditScreen() {
       setBio(me.bio ?? '');
       setExperienceYears(me.experienceYears != null ? String(me.experienceYears) : '');
       setAvailableHours(me.availableHours ?? '');
+      setBankAccount(me.bankAccount ?? '');
     } catch (e) {
       notify((e as Error).message);
     }
@@ -89,6 +91,8 @@ export default function MyProfileEditScreen() {
           experienceYears: expNum,
           availableHours: availableHours.trim() || null,
           updateBio: true,
+          bankAccount: bankAccount.trim() || null,
+          updateBankAccount: true,
         },
       });
       notify('프로필 저장 완료');
@@ -328,8 +332,8 @@ export default function MyProfileEditScreen() {
                   paddingVertical: 8,
                   borderRadius: radius.pill,
                   borderWidth: 1.5,
-                  borderColor: on ? colors.success : colors.border,
-                  backgroundColor: on ? colors.successSoft : colors.surface,
+                  borderColor: on ? colors.primary : colors.border,
+                  backgroundColor: on ? colors.primary100 : colors.surface,
                   flexDirection: 'row',
                   gap: 5,
                   alignItems: 'center',
@@ -339,11 +343,11 @@ export default function MyProfileEditScreen() {
                 <Text style={{
                   fontSize: 11,
                   fontWeight: '700',
-                  color: on ? colors.success : colors.textMuted,
+                  color: on ? colors.primary700 : colors.textMuted,
                 }}>
                   {meta.label}
                 </Text>
-                {on ? <Text style={{ fontSize: 11, color: colors.success }}>✓</Text> : null}
+                {on ? <Text style={{ fontSize: 11, color: colors.primary }}>✓</Text> : null}
               </Pressable>
             );
           })}
@@ -395,6 +399,26 @@ export default function MyProfileEditScreen() {
             />
           </View>
         </View>
+      </View>
+
+      {/* 입금 계좌 — 정산 입금받을 계좌. 근로계약서·원천징수영수증에 표기됨 */}
+      <View style={styles.card}>
+        <Text style={[styles.subtitle, { fontWeight: '700', marginBottom: 4 }]}>💰 입금 계좌</Text>
+        <Text style={{ fontSize: 11, color: colors.textMuted, marginBottom: 8 }}>
+          정산 시 이 계좌로 입금됩니다. 근로계약서·원천징수영수증에 표기되므로 정확히 입력하세요.
+        </Text>
+        <TextInput
+          style={[styles.input, { marginBottom: 0 }]}
+          value={bankAccount}
+          onChangeText={setBankAccount}
+          placeholder="예: 토스뱅크 1234-5678-9012"
+          placeholderTextColor={colors.textLight}
+        />
+        {!bankAccount.trim() ? (
+          <Text style={{ fontSize: 11, color: colors.warn, fontWeight: '700', marginTop: 6 }}>
+            ⚠️ 계좌 미입력 — 정산 입금 불가능
+          </Text>
+        ) : null}
       </View>
 
       <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>

@@ -176,6 +176,15 @@ public class User {
         this.prefMaxCafeNoShowRate = maxCafeNoShowRate;
     }
 
+    /** 입금 계좌 갱신 — 빈 문자열은 null 처리 */
+    public void updateBankAccount(String bankAccount) {
+        if (bankAccount == null || bankAccount.isBlank()) {
+            this.bankAccount = null;
+        } else {
+            this.bankAccount = bankAccount.trim();
+        }
+    }
+
     /** 워커 prefs 가 통과하는 시프트인지 — 매장 단골이면 면제, 그 외엔 prefs 모두 통과해야 함 */
     public boolean prefsAcceptShift(Integer hourlyWage, Double cafeAvgRating, Double cafeNoShowRate, boolean isFavoriteCafe) {
         if (isFavoriteCafe) return true;

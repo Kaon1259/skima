@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Alert, FlatList, Platform, Pressable, RefreshControl, ScrollView, Text, View } from 'react-native';
 import { router } from 'expo-router';
+import { GradientButton } from '@/components/Gradient';
 import { Icon } from '@/components/Icon';
 import KakaoMapThumbnail from '@/components/KakaoMapThumbnail';
 import ShiftSkillBadges from '@/components/ShiftSkillBadges';
@@ -496,7 +497,7 @@ export default function WorkerShiftsScreen() {
               label={favOnly ? '✓ ⭐ 단골만' : '⭐ 단골만'}
               active={favOnly}
               onPress={() => setFavOnly((v) => !v)}
-              accent={colors.warn}
+              accent={colors.primary}
             />
             {myLevelRank != null || myRolesSet.size > 0 || myCertsSet.size > 0 ? (
               <FilterChip
@@ -622,7 +623,7 @@ export default function WorkerShiftsScreen() {
                       label={`${meta.emoji} ${meta.label}`}
                       active={active}
                       onPress={() => setDayFilter(d)}
-                      accent={colors.warn}
+                      accent={colors.primary}
                     />
                   );
                 })}
@@ -759,9 +760,9 @@ export default function WorkerShiftsScreen() {
               alreadyApplied && { borderWidth: 1.5, borderColor: colors.primary },
               wasRejected && { opacity: 0.55 },
               isFavCafe && {
-                borderLeftWidth: 3,
-                borderLeftColor: colors.warn,
-                backgroundColor: colors.warnSoft,
+                borderLeftWidth: 4,
+                borderLeftColor: colors.primary,
+                backgroundColor: colors.primary50,
               },
             ]}
           >
@@ -769,15 +770,15 @@ export default function WorkerShiftsScreen() {
             <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 10 }}>
               <View
                 style={{
-                  width: 32,
-                  height: 32,
-                  borderRadius: 9,
+                  width: 40,
+                  height: 40,
+                  borderRadius: 10,
                   backgroundColor: item.brandColor ?? colors.primary,
                   alignItems: 'center',
                   justifyContent: 'center',
                 }}
               >
-                <Text style={{ color: '#fff', fontWeight: '900', fontSize: 12 }}>
+                <Text style={{ color: '#fff', fontWeight: '900', fontSize: 15 }}>
                   {item.brandLetter ?? '☕'}
                 </Text>
               </View>
@@ -786,9 +787,9 @@ export default function WorkerShiftsScreen() {
                 onPress={() => router.push(`/cafe/${item.cafeId}` as never)}
               >
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, flexWrap: 'wrap' }}>
-                  <Text style={[styles.title, { fontSize: 15 }]} numberOfLines={1}>{item.cafeName}</Text>
+                  <Text style={[styles.title, { fontSize: 16 }]} numberOfLines={1}>{item.cafeName}</Text>
                   {isFavCafe ? (
-                    <Text style={{ fontSize: 11, fontWeight: '800', color: colors.warn }}>⭐</Text>
+                    <Text style={{ fontSize: 11, fontWeight: '800', color: colors.primary }}>⭐</Text>
                   ) : null}
                   {item.cafeAvgRating != null ? (
                     <Text style={{ fontSize: 12, fontWeight: '700', color: colors.warn }}>
@@ -1058,17 +1059,12 @@ function ApplyButton({
     );
   }
   return (
-    <Pressable
-      style={({ pressed }) => [
-        styles.buttonPrimary,
-        { flexDirection: 'row', gap: 6, paddingVertical: 11 },
-        (busy || pressed) && { opacity: 0.85 },
-      ]}
+    <GradientButton
       onPress={onApply}
       disabled={busy}
-    >
-      <Icon name="flash" size={15} color="#fff" />
-      <Text style={[styles.buttonPrimaryText, { fontSize: 14 }]}>{busy ? '지원 중...' : '1탭 지원'}</Text>
-    </Pressable>
+      label={busy ? '지원 중...' : '1탭 지원'}
+      icon={<Icon name="flash" size={15} color="#fff" />}
+      size="sm"
+    />
   );
 }

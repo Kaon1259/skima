@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Alert, Platform, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
+import { GradientButton } from '@/components/Gradient';
 import { Icon } from '@/components/Icon';
 
 import { api } from '@/lib/api';
@@ -483,8 +484,8 @@ export default function NewShiftScreen() {
                   paddingVertical: 8,
                   borderRadius: radius.pill,
                   borderWidth: 1.5,
-                  borderColor: on ? colors.warn : colors.border,
-                  backgroundColor: on ? colors.warnSoft : colors.surface,
+                  borderColor: on ? colors.primary : colors.border,
+                  backgroundColor: on ? colors.primary100 : colors.surface,
                   flexDirection: 'row',
                   gap: 5,
                   alignItems: 'center',
@@ -494,11 +495,11 @@ export default function NewShiftScreen() {
                 <Text style={{
                   fontSize: 11,
                   fontWeight: '700',
-                  color: on ? colors.warn : colors.textMuted,
+                  color: on ? colors.primary700 : colors.textMuted,
                 }}>
                   {meta.label}
                 </Text>
-                {on ? <Text style={{ fontSize: 11, color: colors.warn }}>✓</Text> : null}
+                {on ? <Text style={{ fontSize: 11, color: colors.primary }}>✓</Text> : null}
               </Pressable>
             );
           })}
@@ -620,8 +621,8 @@ export default function NewShiftScreen() {
                 height: 22,
                 borderRadius: 6,
                 borderWidth: 2,
-                borderColor: favoritesOnly ? colors.warn : colors.border,
-                backgroundColor: favoritesOnly ? colors.warn : 'transparent',
+                borderColor: favoritesOnly ? colors.primary : colors.border,
+                backgroundColor: favoritesOnly ? colors.primary : 'transparent',
                 alignItems: 'center',
                 justifyContent: 'center',
               }}
@@ -647,7 +648,7 @@ export default function NewShiftScreen() {
                     onPress={() => setFavoritesOnlyMinutes(m)}
                     style={[
                       styles.chip,
-                      active && { backgroundColor: colors.warn, borderColor: colors.warn },
+                      active && { backgroundColor: colors.primary, borderColor: colors.primary },
                     ]}
                   >
                     <Text style={[styles.chipText, active && { color: '#fff' }]}>{m}분</Text>
@@ -706,18 +707,15 @@ export default function NewShiftScreen() {
         </Text>
       </View>
 
-      <Pressable
-        style={({ pressed }) => [
-          styles.buttonPrimary,
-          { marginTop: 8, flexDirection: 'row', gap: 6 },
-          (busy || pressed) && { opacity: 0.85 },
-        ]}
-        onPress={submit}
-        disabled={busy || cafes.length === 0}
-      >
-        <Icon name="rocket" size={16} color="#fff" />
-        <Text style={styles.buttonPrimaryText}>{busy ? '등록 중...' : '시프트 등록 (1시간 매칭 시작)'}</Text>
-      </Pressable>
+      <View style={{ marginTop: 8 }}>
+        <GradientButton
+          onPress={submit}
+          disabled={busy || cafes.length === 0}
+          label={busy ? '등록 중...' : '시프트 등록 (1시간 매칭 시작)'}
+          icon={<Icon name="rocket" size={16} color="#fff" />}
+          size="lg"
+        />
+      </View>
     </ScrollView>
   );
 }

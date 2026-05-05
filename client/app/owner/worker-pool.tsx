@@ -315,12 +315,12 @@ function WorkerCard({
   const borderColor =
     tone === 'positive' ? colors.success
     : tone === 'negative' ? colors.danger
-    : tone === 'favorite' ? colors.warn
+    : tone === 'favorite' ? colors.primary
     : colors.border;
   const bg =
     tone === 'positive' ? colors.successSoft
     : tone === 'negative' ? colors.dangerSoft
-    : tone === 'favorite' ? colors.warnSoft
+    : tone === 'favorite' ? colors.primary50
     : colors.surfaceAlt;
 
   return (
@@ -372,10 +372,10 @@ function WorkerCard({
                   paddingHorizontal: 6,
                   paddingVertical: 2,
                   borderRadius: radius.pill,
-                  backgroundColor: colors.warnSoft,
+                  backgroundColor: colors.primary100,
                 }}
               >
-                <Text style={{ fontSize: 10, fontWeight: '900', color: colors.warn }}>⭐ 점주 단골</Text>
+                <Text style={{ fontSize: 10, fontWeight: '900', color: colors.primary700 }}>⭐ 점주 단골</Text>
               </View>
             ) : null}
             {w.totalMatches >= 2 ? (

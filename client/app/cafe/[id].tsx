@@ -1,10 +1,11 @@
 import { useCallback, useState } from 'react';
-import { Alert, FlatList, Platform, Pressable, RefreshControl, Text, View } from 'react-native';
+import { Alert, FlatList, Linking, Platform, Pressable, RefreshControl, Text, View } from 'react-native';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 
 import { Image as ExpoImage } from 'expo-image';
 
 import { initialFor } from '@/components/Avatar';
+import { GradientButton } from '@/components/Gradient';
 import { Icon } from '@/components/Icon';
 import KakaoMapThumbnail from '@/components/KakaoMapThumbnail';
 import { SkeletonCard } from '@/components/Skeleton';
@@ -157,8 +158,8 @@ export default function CafeDetailScreen() {
                     paddingVertical: 10,
                     borderRadius: radius.md,
                     borderWidth: 1.5,
-                    borderColor: isFavorite ? colors.warn : colors.border,
-                    backgroundColor: isFavorite ? colors.warnSoft : colors.surface,
+                    borderColor: isFavorite ? colors.primary : colors.border,
+                    backgroundColor: isFavorite ? colors.primary100 : colors.surface,
                   },
                   pressed && { opacity: 0.85 },
                 ]}
@@ -168,7 +169,7 @@ export default function CafeDetailScreen() {
                   style={{
                     fontSize: 12,
                     fontWeight: '800',
-                    color: isFavorite ? colors.warn : colors.text,
+                    color: isFavorite ? colors.primary700 : colors.text,
                   }}
                 >
                   {isFavorite ? '단골 — 알림 받는 중' : '단골 매장 등록'}
@@ -369,8 +370,7 @@ function SignalsCard({ detail }: { detail: CafeDetail }) {
 
 function AboutCard({ detail }: { detail: CafeDetail }) {
   const hasCoords = detail.latitude != null && detail.longitude != null;
-  const hasAny = detail.openHours || detail.seatCount != null || detail.phone || detail.description || hasCoords;
-  if (!hasAny) return null;
+  // 위치 정보가 항상 (지도 또는 외부 링크 placeholder) 노출되도록 가드 제거 — 사용자 첫 진입 시 매장 위치 즉시 인지 가능
   return (
     <View style={[styles.card, { marginBottom: spacing.md }]}>
       <Text style={[styles.title, { marginBottom: 8 }]}>매장 정보</Text>
@@ -406,7 +406,40 @@ function AboutCard({ detail }: { detail: CafeDetail }) {
             height={160}
           />
         </View>
-      ) : null}
+      ) : (
+        <Pressable
+          onPress={() => {
+            const url = `https://map.kakao.com/?q=${encodeURIComponent(detail.name + ' ' + (detail.address ?? ''))}`;
+            Linking.openURL(url);
+          }}
+          style={({ pressed }) => [
+            {
+              marginTop: 10,
+              padding: 14,
+              borderRadius: radius.md,
+              backgroundColor: colors.surfaceAlt,
+              borderWidth: 1,
+              borderStyle: 'dashed',
+              borderColor: colors.border,
+              flexDirection: 'row',
+              alignItems: 'center',
+              gap: 10,
+            },
+            pressed && { opacity: 0.7 },
+          ]}
+        >
+          <Text style={{ fontSize: 22 }}>🗺</Text>
+          <View style={{ flex: 1 }}>
+            <Text style={{ fontSize: 12, fontWeight: '800', color: colors.text }}>
+              위치 좌표 정보 없음
+            </Text>
+            <Text style={{ fontSize: 11, color: colors.textMuted, marginTop: 2 }}>
+              탭하면 카카오맵에서 매장명으로 검색됩니다
+            </Text>
+          </View>
+          <Text style={{ fontSize: 14, color: colors.primary, fontWeight: '800' }}>›</Text>
+        </Pressable>
+      )}
     </View>
   );
 }
@@ -623,18 +656,14 @@ function OpenShiftCard({
         ) : null}
       </View>
       {isWorker ? (
-        <Pressable
-          style={({ pressed }) => [
-            styles.buttonPrimary,
-            { marginTop: 14, flexDirection: 'row', gap: 6 },
-            (busy || pressed) && { opacity: 0.85 },
-          ]}
-          onPress={onApply}
-          disabled={busy}
-        >
-          <Icon name="flash" size={16} color="#fff" />
-          <Text style={styles.buttonPrimaryText}>{busy ? '지원 중...' : '1탭 지원'}</Text>
-        </Pressable>
+        <View style={{ marginTop: 14 }}>
+          <GradientButton
+            onPress={onApply}
+            disabled={busy}
+            label={busy ? '지원 중...' : '1탭 지원'}
+            icon={<Icon name="flash" size={16} color="#fff" />}
+          />
+        </View>
       ) : null}
     </Pressable>
   );

@@ -36,6 +36,7 @@ const TYPE_ICON: Record<NotificationItem['type'], string> = {
   PAYOUT_REQUESTED: 'wallet',
   NOSHOW_REPORTED: 'alert-circle',
   SHIFT_CANCELED: 'alert-circle',
+  WORKER_CONTRACT_ACK: 'document-text',
   FAVORITE_CAFE_NEW_SHIFT: 'star',
 };
 

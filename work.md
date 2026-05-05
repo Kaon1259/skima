@@ -4,6 +4,513 @@
 
 ---
 
+## 2026-05-04 (10차) — 점주 정산 강제 게이트 + 워커 ack 알림 + 계좌 등록
+
+### 동기 (사용자 요청)
+1. "워커가 근로계약서 확인하면 점주도 확인하고 동의하는 동선이 있어야"
+2. "수동 정산 시 선 동의 후 정산이 되어야"
+3. "워커의 계좌가 필요할 거 같긴 한데. 그건 워커의 프로필에 등록하게 되는 건가요?"
+
+### 진단 결과
+- 9차에서 **점주 정산 자동 ack** 였음 — 명시적 동의 부족 → 강제 게이트로 전환
+- 워커 계좌: 백엔드(`User.bankAccount`) 컬럼 + 시드 OK + `ContractResponse` 채워줌. **클라 me 응답·요청 DTO·프로필 UI 모두 누락** → 워커가 등록할 곳 없음
+
+### 1. 백엔드 — 정산 강제 게이트 (자동 ack 제거)
+- `OwnerController.approvePayout()`:
+  - 매칭 본인 매장 검증 + `match.getOwnerAcknowledgedContractAt() == null` → BusinessException
+  - 메시지: "정산 승인 전 근로계약서 확인이 필요합니다. ..."
+- 자동 ack 1줄 삭제
+- 클라 우회 방지
+
+### 2. 백엔드 — Payout 응답에 ack 시각 노출
+- `PayoutResponse` 에 `LocalDateTime ownerContractAckAt` 필드 추가
+- 정산 카드에서 정산 승인 누르기 전 클라가 검사 가능
+- types.ts `Payout` 동기화
+
+### 3. 클라 — 정산 승인 모달 ack 게이트 (3 호출처)
+- `owner/shift/[id].tsx` GradientButton: ack 검사 → 없으면 alert + `/owner/contract/{matchId}?focus=ack` 라우팅. 라벨 동적 (`'정산 승인 + 평가'` ↔ `'📄 계약서 확인 후 정산'`)
+- `owner/shift/[id].tsx` 알림 라우팅 useEffect: `?action=approve` 진입 시 ack 검사 → 없으면 모달 자동 오픈 대신 계약서 화면으로 라우팅
+- `owner/payouts.tsx` 정산 카드 GradientButton: 동일 패턴
+- 점주 메인 카드 ack 배너 문구: "정산 승인 시 자동 등록" → "정산 전 필수"
+
+### 4. 워커 ack → 점주 알림 (대칭 동선 완성)
+- `NotificationService.forOwner()` 에 새 type `WORKER_CONTRACT_ACK` 추가
+- 조건: `match.workerAck != null && match.ownerAck == null && status not in (NO_SHOW, CANCELED)`
+- 라우트: `/owner/contract/{matchId}?focus=ack`
+- title: "{워커명} 워커가 근로계약서 확인" / subtitle: "{매장명} · 점주 확인 필요 (정산 전 필수)"
+- types.ts NotificationItem.type 에 `WORKER_CONTRACT_ACK` 추가
+- NotificationBell TYPE_ICON에 `document-text` 매핑
+
+### 5. 워커 계좌 등록 — 풀스택
+- **백엔드**:
+  - `MeController.me()` 응답에 `phone`, `bankAccount` 필드 추가
+  - `WorkerProfileUpdateRequest` 에 `bankAccount`, `updateBankAccount` 필드 추가 (다른 토글 패턴과 동일)
+  - `User.updateBankAccount(String)` 메서드 추가 — 빈 문자열은 null 처리
+  - `MeController.updateWorkerProfile()` 에서 `updateBankAccount=true` 시 갱신
+- **클라**:
+  - `lib/types.ts MyProfile` 에 `phone`, `bankAccount` 추가
+  - `worker/profile.tsx`:
+    - state `bankAccount` 추가, `load()` 에서 채움
+    - 가능 시간대 카드 다음에 **"💰 입금 계좌"** 신규 카드 — TextInput + 안내문 ("정산 입금 + 근로계약서·원천징수영수증 표기")
+    - 비어있으면 warn 텍스트 "⚠️ 계좌 미입력 — 정산 입금 불가능"
+    - save() body 에 `bankAccount + updateBankAccount: true` 포함
+
+### 양측 동선 차트 (10차 라운드 정착 후)
+
+**워커 ack 동선:**
+- 자발적: 매칭 카드 → "📄 근로계약서 확인 필요" 배너 → 계약서 화면 → "근로자 확인 등록"
+- 강제: 출근 체크인 클릭 → ack 없으면 alert + 계약서 화면 자동 라우팅 + 강조 모드
+
+**점주 ack 동선 (4가지 진입):**
+- 자발적 1: 메인 시프트 카드 → 매칭 워커 박스 아래 "📄 근로계약서 확인 필요 — 정산 전 필수" 한 줄 배너 → 계약서 화면
+- 자발적 2: 시프트 상세 → 매칭 워커 hero 아래 큰 배너 → 계약서 화면
+- **자발적 3 (NEW)**: 점주 알림함 → 워커가 ack 했으면 "{워커} 워커가 근로계약서 확인" 알림 → 클릭 → 계약서 화면
+- 강제: 정산 승인 + 평가 클릭 → ack 없으면 alert + 계약서 화면 자동 라우팅
+
+**워커 계좌 동선:**
+- 마이 탭 → 내 프로필 편집 → "💰 입금 계좌" 카드 → 등록
+- 계약서 화면에 자동 표기 ("입금계좌" 필드)
+- 미등록 시 프로필에 warn 경고
+
+### 검증
+- `tsc --noEmit` exit 0
+- 시드: `bankAccount("토스 1234-N")` 자동 채움 → 워커 4명 모두 데모 가능
+- 시나리오:
+  1. 워커가 ack 등록 → 점주 알림함에 알림 도착
+  2. 점주가 ack 안 한 채로 정산 승인 누름 → alert + 계약서 화면 자동 이동 → ack → 매칭으로 복귀 → 다시 정산
+  3. 워커 마이 → 프로필 편집 → 계좌 비우면 warn → 입력 후 저장 → 계약서 화면에 반영
+
+### 잔여
+- AWS IAM 키 폐기 (P0)
+- 카카오 redirect URI 등록
+- 점주 측 매칭 확정 시 워커 알림함에 "근로계약서 확인 요청" 발송 (대칭) — 현재는 워커는 자체 매칭 카드 배너로만 인지
+
+---
+
+## 2026-05-04 (9차) — 체크인 강제 게이트 + 점주 정산 시 자동 ack
+
+### 동기 (사용자 요청)
+"근로계약서 확인 전에 출근 체크인 하면 어떻게 되나요?"
+"출근 체크인 시 근로계약서 확인 안 한 경우 → 계약서 확인 후 가도록, 확인된 경우라면 바로 출근. 점주도 동의해야 — 동선 체크"
+
+### 8차 라운드 한계
+- B 트랙은 ack 강제 X (1탭 정신). 결과: 워커가 ack 안 해도 체크인 정상 처리됨 → 분쟁 시 ack 시각 null 이라 입증 불가
+- 점주 ack 동선이 시프트 상세 안에만 있음 → 메인 카드에선 강조 없음
+
+### 변경 — 양측 ack 강제화 + 점주 자동 ack
+
+#### 1. 백엔드 — `CheckInOutService.checkIn()` 게이트
+- 매칭 ack 검사 추가: `match.getWorkerAcknowledgedContractAt() == null` 이면 BusinessException
+- 메시지: "근로계약서를 먼저 확인해주세요. 매칭 카드의 '📄 근로계약서 확인' 배너를 탭해 동의하면 체크인 가능합니다."
+- 클라 우회 호출도 차단
+
+#### 2. 백엔드 — `OwnerController.approvePayout()` 자동 ack
+- 정산 승인 시 점주 ack 가 null 이면 자동으로 채움 (`match.acknowledgeContractByOwner(now())`)
+- 정산 승인 = 근무·체크아웃 다 보고 임금 인정 = 점주의 묵시적 동의로 충분
+- 점주는 별도 ack 안 해도 정산 승인 시점에 자동 등록 → 분쟁 방어 자료 자동 확보
+
+#### 3. 클라 — 워커 매칭 카드 출근 체크인 게이트
+- "출근 체크인" 버튼 onPress → ack 검사
+  - ack 없음: alert "근로계약서를 먼저 확인해주세요. 확인 화면으로 이동합니다." → `/contract/{matchId}?focus=ack` 라우팅
+  - ack 있음: 정상 체크인
+- 버튼 라벨도 동적: ack 없으면 "📄 계약서 확인 후 출근" / 있으면 "출근 체크인"
+
+#### 4. 클라 — 계약서 화면 `?focus=ack` 강조
+- URL query `focus=ack` 받으면:
+  - 화면 헤더 sub: "👇 출근 전 마지막 단계 — 아래에서 확인 등록해주세요"
+  - AcknowledgeCard 자동 스크롤 (200ms 딜레이 후 ScrollView.scrollTo)
+  - AcknowledgeCard 본인 미확인이면 강조 모드: warn 톤 (warnSoft 바탕 + warn 보더 3px) + "⏳ 출근 전 필수 단계" 라벨 + 제목 색 warn
+
+#### 5. 클라 — 점주 메인 시프트 카드 ack 강조
+- `owner/shifts.tsx` ShiftCard 매칭 워커 박스 아래 한 줄 배너 추가 (warn 톤 컴팩트)
+- 노출 조건: 매칭 있음 + ownerAck 없음 + payoutStatus !== 'COMPLETED'
+- 클릭 → `/owner/contract/{matchId}?focus=ack` (점주도 강조 화면 진입)
+- "근로계약서 확인 필요 — 정산 승인 시 자동 등록" — 점주가 까먹어도 자동 처리됨을 명시
+
+### 점주 ack 동선 차트 (이번 라운드 정리 후)
+- **수동 진입 1**: 점주 메인 `owner/shifts.tsx` 시프트 카드 → 매칭 워커 박스 아래 "📄 근로계약서 확인 필요" 한 줄 배너 → 클릭 → 계약서 화면
+- **수동 진입 2**: `owner/shift/[id]` 상세 → 매칭 워커 hero 카드 아래 "📄 근로계약서 확인 필요" 큰 배너 → 클릭 → 계약서 화면
+- **수동 진입 3**: 시프트 상세 ShiftTimeline 단계 "점주 계약서 확인 대기" 시각적 노출
+- **자동 등록**: 정산 승인 시 (RatingModal "정산 승인 + 평가" 버튼) → ack 자동 채움
+- **수동 ack 등록 시점**: 매칭 직후 ~ 정산 승인 직전 어디서든 가능
+
+### 워커 ack 동선 차트
+- **수동 진입 1**: `worker/matches.tsx` 매칭 카드 → "📄 근로계약서 확인 필요" 큰 배너 → 클릭 → 계약서 화면
+- **강제 진입**: 출근 체크인 버튼 클릭 → ack 없으면 alert + 자동 라우팅 → 계약서 화면 강조 모드 → 확인 → 매칭 화면 복귀 → 다시 출근
+- TimelineDot 에 "근로계약서 확인 대기 — 점주도 확인함" sub
+
+### 검증
+- `tsc --noEmit` exit 0
+- 백엔드 재기동 — 시드 reseed (모든 매칭 ack null 초기화)
+- 시나리오:
+  1. 워커가 매칭 카드에서 "📄 계약서 확인 후 출근" 버튼 보임 (ack 없을 때)
+  2. 클릭하면 alert + 계약서 화면 자동 라우팅 + 화면 자동 스크롤 + warn 강조 모드
+  3. "✍️ 근로자 확인 등록" 클릭 → ack 등록
+  4. 매칭 화면 복귀 (뒤로가기) → 버튼이 "출근 체크인" 으로 변경됨 → 클릭 → 정상 체크인
+- 점주 시나리오:
+  1. 점주가 매칭 후 시프트 메인 카드에서 ack 배너 보임
+  2. 정산 승인 누르면 ack 자동 등록됨 (별도 클릭 불필요)
+  3. 또는 매칭 직후 시프트 상세 진입 → "📄 근로계약서 확인 필요" 큰 배너 → 클릭 → 사업주 확인 등록
+
+### 잔여
+- 워커가 클라 우회로 직접 API 호출하면 백엔드도 막아 안전
+- AWS IAM 키 폐기 (P0 잔여)
+- 카카오 redirect URI 등록
+
+---
+
+## 2026-05-04 (8차) — 근로계약서 양측 확인 동의 흐름 (B 트랙)
+
+### 동기 (사용자 요청)
+"매칭이 되면 자동으로 근로계약서가 생성되어야 하는 거죠. 그럼 각각 확인을 해야 할 거 같긴한데. 그런 UX/UI가 있던가요?"
+
+### 진단 결과
+- **계약서 데이터 자동 생성**은 이미 됨 (매칭 시점에 모든 항목 확정, ComplianceService.buildContractFromMatch). 단 별도 엔티티 X — 매칭 데이터로부터 동적 응답
+- **양측 확인/동의 흐름은 없었음**: ack 필드/엔드포인트/타임라인 단계 모두 누락. 매칭 직후 사용자가 계약서 봤는지 입증 불가
+
+### 트랙 B 결정 사유
+- A(UI 강조만)는 분쟁 시 입증 자료 못 됨
+- C(체크인 강제 게이트)는 1탭 정신과 충돌. 일찍 도착한 워커가 막힘
+- B(양측 ack 필드 + UI 강조 + 강제 X)가 균형. 근기법 17조 입증 + UX 친화
+
+### 1. 백엔드 도메인 — `ShiftMatch.java`
+- 컬럼 2개 추가: `worker_ack_contract_at`, `owner_ack_contract_at` (LocalDateTime)
+- 메서드 2개: `acknowledgeContractByWorker(at)` / `acknowledgeContractByOwner(at)` — 1회만 기록 (이미 있으면 무시)
+- ddl-auto: create 라 reseed 시 컬럼 자동 추가
+
+### 2. 백엔드 엔드포인트 (각 역할별 본인 매칭만)
+- `POST /api/worker/matches/{matchId}/contract/ack` — 워커 본인 매칭에 ack 등록
+- `POST /api/owner/matches/{matchId}/contract/ack` — 점주 본인 매장 매칭에 ack 등록
+- 응답: `{ workerAcknowledgedContractAt, ownerAcknowledgedContractAt }` (양측 시각)
+
+### 3. 응답 DTO 동기화
+- `ContractResponse` 에 `ownerAcknowledgedAt`, `workerAcknowledgedAt` 추가 (`ComplianceService.buildContractFromMatch` 채워줌)
+- `MatchResponse` (워커 매칭 응답) 에 `ownerContractAckAt`, `workerContractAckAt` 추가 — `from()` 헬퍼에서 직접 채움
+- `OwnerShiftView` 에 동일 필드 추가 — `OwnerController.shifts()` 에서 채움
+- 클라 `lib/types.ts` ContractData / OwnerShift / ShiftMatch 모두 동기화
+
+### 4. `contract/[matchId]` 화면 — 양측 확인 UX
+- 화면 하단에 **AcknowledgeCard** 컴포넌트 신규
+  - 양측 모두 확인 시: `successSoft` 바탕 + "✓ 양측 확인 완료"
+  - 미확인 시: `primary50` 바탕 + "📄 근로계약서 양측 확인" + 안내문(근기법 17조)
+  - 양측 상태 카드 2개 (사업주 / 근로자) — 확인 시각 + ✓ 표시
+  - 본인 미확인이면 `GradientButton` "✍️ 사업주/근로자 확인 등록" — 호출 후 응답 시각으로 로컬 갱신
+  - 본인 확인 완료면 + 상대방 미확인이면 "{상대}의 확인을 기다리는 중"
+
+### 5. 점주 측 — `owner/shift/[id].tsx` ShiftTimeline
+- stages 배열에 단계 2개 추가: "점주 계약서 확인" / "워커 계약서 확인" (매칭 확정 다음 단계, 출근 체크인 전)
+- 매칭 워커 hero 카드 아래 — 점주 미확인 시 강조 배너 ("근로계약서 확인 필요" warn 톤) → `/owner/contract/{matchId}` 진입
+
+### 6. 워커 측 — `worker/matches.tsx`
+- 매칭 카드 헤더 직후 — 워커 미확인 시 강조 배너 ("근로계약서 확인 필요" warn 톤) → `/contract/{matchId}` 진입
+- TimelineDot 매칭 확정 다음에 "근로계약서 확인" 단계 추가, sub 텍스트로 점주 확인 여부 노출
+
+### 톤 정책 (이번 라운드 신규 결정)
+- ack **미확인** = warn (노랑) — 액션 유도 (5/4 (5차) 라운드에서 "warn = 경고" 정의 정합)
+- 양측 모두 ack 완료 = success (녹색)
+- 본인 ack 완료 + 상대 대기 = surface + success border (반쯤 진행)
+
+### 검증
+- `tsc --noEmit` exit 0
+- 백엔드 재기동 (DDL 변경 반영) — 새 컬럼 2개 자동 추가
+- ddl-auto: create 로 시드 매번 reseed → 모든 매칭의 ack 시각 null 로 초기화
+- 폰 reload 후 시나리오:
+  1. 점주 owner1 로 시드 매칭 진입 → "근로계약서 확인 필요" 배너 노출 → 클릭 → 계약서 화면 → 사업주 확인 등록
+  2. 워커 worker1 로 매칭 화면 → 같은 매칭에 미확인 배너 노출 → 워커 확인 등록
+  3. 양측 확인 후 timeline 4단계 (등록·매칭·점주확인·워커확인) ✓
+
+### 잔여 (다음 라운드)
+- 워커가 출근 시 ack 안 했으면 가벼운 경고만 (강제 X) — 현재는 그냥 출근 가능
+- AWS IAM 키 폐기 (P0 잔여)
+- 카카오 redirect URI 등록
+
+---
+
+## 2026-05-04 (7차+) — 시프트 등록 디폴트 startAt 변경 (중복 경고 UX)
+
+### 사용자 보고
+- 점주 김씨(owner1)로 시프트 등록 시 "같은 매장·시간 시프트가 1건 있어요" 경고가 거의 항상 뜸
+
+### 원인
+- 시프트 등록 디폴트 startAt = `다음 정시` (오늘 + 30분~1시간) + 4시간
+- 시드 reseed 시 owner1 매장(메가강남역점)에 `now+2시간`부터 시프트가 깔림
+- → 디폴트 값이 시드 시프트와 시간 겹침 → 경고 정상 발생
+- 동작은 맞지만 사용자는 "내가 안 등록했는데 왜?" 라고 느낌 (시드 데이터는 자동 생성된 것)
+
+### 변경 — `client/components/DateTimePicker.tsx`
+- `defaultStartLocal()` 반환값을 **다음 정시 → 내일 오전 9시**로 변경
+- 시드 시프트(오늘 시간대)와 안 겹침
+- 실 운영 관점: 점주가 1시간 안에 매칭 가능한 워커 모집은 드문 케이스. 보통 다음 날 / 며칠 후 시프트 등록이 자연스러움
+
+### 검증
+- `tsc --noEmit` exit 0
+- Metro HMR 자동 적용 — 폰 reload 후 시프트 등록 화면 디폴트값 = 내일 오전 9시
+
+---
+
+## 2026-05-04 (7차) — 매장 상세 지도 보강 + 점주 매칭 워커 진입
+
+### 동기 (사용자 요청)
+1. 워커가 매장 상세 진입 시 위치가 텍스트로만 — 지도 노출 보강
+2. 점주 시프트에서 매칭 워커명 클릭 → 워커 상세 진입 가능해야 함
+
+### 진단
+- **지도는 이미 있음** (5/4 4차 라운드 KakaoMapThumbnail). 단 `latitude && longitude` 있을 때만 노출. 시드 매장 4개에 좌표 비어있어 데모 시 빈약. 사용자가 카카오 검색으로 새 매장 등록하는 경우만 좌표 입력됨
+- 점주 OwnerShiftView DTO 에 `matchedWorkerName` 만 있고 `matchedWorkerId` 없음 — 클라이언트에서 워커 상세 진입 불가능
+
+### 1. OwnerShiftView DTO + Controller (백엔드)
+- `OwnerShiftView` record 에 `Long matchedWorkerId` 필드 추가 (matchedWorkerName 앞)
+- `OwnerShiftView.from(...)` 시그니처 + 호출자(`OwnerController.shifts()`) 동기화 — `m.getWorker().getId()` 채워줌
+- 클라 `lib/types.ts OwnerShift` 에 `matchedWorkerId?: number | null` 추가
+
+### 2. 점주 매칭 워커 박스 → 워커 상세 진입
+- `owner/shifts.tsx` ShiftCard 매칭 워커 박스 — `View` → `Pressable + onPress + stopPropagation`. matchedWorkerId 있을 때만 활성. 헤더에 chevron-forward 추가. 평가하기 버튼도 stopPropagation 처리
+- `owner/dashboard/[status].tsx` 매칭 워커 박스 3종 (matched / in-progress / completed) 모두 같은 패턴 적용
+- `owner/shift/[id].tsx` ShiftTimeline 헤더 — 매칭 워커 hero 카드 신규 추가 (`primary50` 바탕 + 아바타 + "매칭 워커" 라벨 + 이름 + "상세 ›" CTA). 시프트 상세에 들어왔을 때 워커 진입 도구 누락된 갭 보완
+
+### 3. 시드 매장 4개 좌표 추가 (DataSeeder)
+- 메가MGC커피 강남역점: (37.4979, 127.0276)
+- 메가MGC커피 역삼점: (37.5006, 127.0367)
+- 컴포즈커피 홍대점: (37.5547, 126.9237)
+- 파리바게뜨 신촌점: (37.5573, 126.9389)
+- 시드 reseed 후 매장 상세에 KakaoMapThumbnail 자동 노출 ✓ + 워커 시프트 카드 88px 미니맵도 노출
+
+### 4. 매장 상세 좌표 없을 때 placeholder (cafe/[id])
+- AboutCard `hasAny` 가드 제거 — 매장 정보 카드는 항상 노출 (위치 안내 항상 보장)
+- 좌표 없는 매장에 dashed border placeholder + "🗺 위치 좌표 정보 없음 — 카카오맵에서 검색" 외부 링크 (`https://map.kakao.com/?q={매장명+주소}` 로 Linking.openURL)
+- `Linking` 정적 import 추가
+
+### 5. 점주 측 진입 일관성 (이번 라운드 정착)
+- 점주 시프트 메인 카드: 카드 외 영역 = 시프트 상세 / 매칭 워커 박스 = 워커 상세 / 채팅 unread 알약 = 시프트 상세 / 평가하기 = 평가 모달
+- 점주 dashboard/[status]: 카드 외 영역 = 시프트 상세 / 매칭 워커 박스 = 워커 상세
+- 점주 shift/[id]: ShiftTimeline 헤더 매칭 워커 hero = 워커 상세
+- 워커 시프트 카드: 매장명·주소 영역 = 매장 상세 / 1탭 지원 버튼 = 지원
+- 워커 매칭 카드: 매장명 영역 = 매장 상세 / 출근·퇴근 CTA = 액션
+
+### 검증
+- `tsc --noEmit` exit 0
+- Spring Boot 재기동 (DTO + 시드 reseed 필요), Metro HMR 그대로
+
+### 잔여 (다음 라운드)
+- AWS IAM 키 폐기 (P0 — 여러 라운드 잔여)
+- 카카오 redirect URI 등록 + 카카오 로그인 검증
+- 분쟁 신고 UI / 자동 판정 cron
+- saju 디자인 추가 참조
+
+---
+
+## 2026-05-04 (6차) — 점주 + 공유 화면 톤 통일 (트랙 A·B·C 일괄)
+
+### 동기
+- 5차 라운드(워커 톤업)에 이어 점주 화면도 같은 오렌지 컨셉 적용. 워커↔점주 첫인상 일관성 확보
+- 사용자 요청: A→B→C 트랙 순서로 일괄 진행, 질문 없이 마무리되면 서버 기동 후 알림
+
+### 톤 정책 (5차 라운드와 동일 — 점주에도 적용)
+- **primary 오렌지**: 브랜드 / 단골 / 수입(점주 입장 = 지출 합계도 brand) / CTA / 활성 필터 / 자격 칩
+- **success 녹색**: 작업 완료 의미만 (완료 시프트, 워커 수령 net, SLA OK)
+- **warn 노랑**: 경고만 (모집 status, 프로필 미완성, SLA 임박, 평가 대기)
+- **danger 빨강**: 노쇼 / unread / 거절 / 취소
+- 별점 ★, 모집 상태색 등 의미색은 모두 유지
+
+### 트랙 A — 점주 메인 4탭
+
+#### A1. owner/_layout
+- 헤더 `colors.surface` → `colors.primary50` 와시 (워커와 동일)
+- 탭바 active indicator — 아이콘 위 4×22px 오렌지 알약 (focused 만)
+- 라벨 fontWeight 600→700, 높이 60→64
+
+#### A2. owner/shifts.tsx (`shifts.tsx`)
+- 첫 시프트 등록 큰 CTA `colors.primary` solid → `GradientButton size lg`
+- QuickLink 3개에 `highlight` prop 추가 — 워커풀(단골)만 `primary100` 바탕 + `primary300` 보더 + `primary700` 텍스트로 강조 (양쪽은 흰 바탕, 위계 살림)
+- ShiftCard 평가하기 버튼 `warn` 노랑 → `primary` (브랜드 통일)
+- DashPill 4알약(모집/매칭/근무/완료) 의미색은 그대로 유지 (warn/info/primary/success)
+
+#### A3. owner/new-shift.tsx
+- 시프트 등록 메인 CTA `styles.buttonPrimary` → `GradientButton size lg`
+- 요구 자격 다중 칩 active `warn` → `primary100` + `primary` 보더 + `primary700` 텍스트
+- 단골 우선 노출 토글 체크박스 + 분(分) 칩 active `warn` → `primary` (단골은 브랜드)
+- 직무/등급/시급/요일/일괄 토글 등은 이미 primary 톤 — 유지
+
+#### A4. owner/cafes.tsx
+- Empty 상태 "첫 매장 등록" CTA → `GradientButton`
+- FAB / 매장 카드 / 통계 등은 이미 primary 톤 — 유지
+
+#### A5. owner/payouts.tsx
+- 이번달 총 지출 큰 카드 — surface → `primary50` 바탕 + `primary200` 보더, 라벨 → `primary700`, 큰 숫자 → `primary` (수입/지출 = 브랜드 가치)
+- "정산 승인 + 평가" CTA `colors.success` solid → `GradientButton size sm` (점주 핵심 액션)
+- 워커 수령 net 색은 success 유지 (워커 입장 = 받는 돈)
+- 30분 SLA / 승인 대기 borderLeft warn 의미색 유지
+
+### 트랙 B — 점주 부속 화면
+
+#### B1. owner/dashboard/[status]
+- 변경 없음 — status별 의미색(warn/info/primary/success) 이미 정합. SLA 임박 표시도 명확.
+
+#### B2. owner/history.tsx
+- 변경 없음 — 의미색 정합. 월 셀렉터 primary, 노쇼 danger, 별점 warn 모두 OK.
+
+#### B3. owner/worker-pool.tsx
+- WorkerCard tone 'favorite' borderColor `warn` → `primary`, bg `warnSoft` → `primary50`
+- 점주 단골 뱃지 `warnSoft` + `warn` → `primary100` + `primary700` (단골은 브랜드)
+- VIP/단골/신규 tier 뱃지 (TIER_META) 는 자체 컬러 시스템 유지 — 별도 의미
+
+#### B4. owner/shift/[id].tsx
+- 매칭 확정 CTA `styles.buttonPrimary` → `GradientButton`
+- 정산 승인 + 평가 CTA `colors.success` solid → `GradientButton`
+- 노쇼 등록은 danger borderColor 유지 (의미색)
+- 워커 평가만 등록은 buttonSecondary 유지 (보조 액션)
+
+#### B5. owner/statement.tsx
+- 변경 없음 — 의미색 정합. 정보 위주 화면.
+
+### 트랙 C — 공유 + 워커 hidden 화면
+
+#### C1. components/WorkerHomeWidgets.tsx (me.tsx 헤더로 이주된 위젯)
+- 오늘 매칭 — solid primary → `GradientCard` (워커 home.tsx 동일 패턴)
+- 이번주 받을 돈 — `successSoft` 녹색 → `primary50` + `primary` 숫자 + `primary200` 보더
+- 내 평점·단골 — `warnSoft` 노랑 → `primary100` + `primaryDark` 숫자 + `primary300` 보더
+- 단골 매장 새 시프트 — `successSoft` → `primary50` + `primary` 보더
+- 점주 직접 호출 hero(solid primary) 유지
+
+#### C1. worker/profile.tsx
+- 보유 자격 다중 칩 active `success` 녹색 → `primary100` + `primary` 보더 + `primary700` 텍스트
+- 보건증 업로드 안내 (warn) 등은 의미색 유지
+
+#### C1. worker/invitations.tsx
+- 수락 (1탭 매칭) CTA `colors.success` solid → `GradientButton` (브랜드 핵심 액션)
+- 만료 시간 알약 warn 유지 (시간 경고)
+- 카드 borderLeft + bg `primarySoft` 그대로 OK
+
+#### C1. worker/stats.tsx, worker/documents.tsx
+- 변경 없음 — 의미색 정합. 정보·통계 화면.
+
+#### C2. cafe/[id].tsx (공유 매장 상세)
+- 단골 매장 등록 버튼 `warn` + `warnSoft` → `primary` + `primary100` (브랜드)
+- 단골 텍스트 색 `warn` → `primary700`
+- 1탭 지원 CTA `styles.buttonPrimary` → `GradientButton`
+- CountPill 모집중/별점 등 의미색 유지
+
+#### C2. u/[id].tsx (공유 워커 프로필)
+- 변경 없음 — 모든 warn 사용처가 별점·지각·평점분포 등 의미색
+
+#### C2. contract/[matchId].tsx, withholding/[matchId].tsx
+- 변경 없음 — 의미색 사용 0건. 신고용 깔끔한 문서 화면.
+
+### 시각 검증
+- `tsc --noEmit` exit 0 (컴파일 에러 0)
+- 백엔드 8090 + Metro 8081 둘 다 살아있고 폰 연결 유지 — 코드 변경은 색·import만이라 Metro HMR로 자동 적용
+- 폰에서 reload 후 워커/점주 양쪽 모든 핵심 화면 톤 일관성 확인 가능
+
+### 잔여 (다음 라운드)
+- **AWS IAM 키 `AKIAW7WYAVZMXZUV6MFB` 폐기** (보안 P0 — 여러 라운드 잔여)
+- 카카오 로그인 redirect URI 등록 + 워커 카카오 로그인 검증
+- saju 디자인 추가 참조 (BrandMark·하단 메뉴)
+- 점주 분쟁 신고 UI / 분쟁 자동 판정 cron
+- 매장 사진을 워커 시프트 카드 헤더에 작은 썸네일로 노출
+- 시프트 추천 점수 디버그 (왜 이 시프트가 추천인지 score 표시)
+- 카카오 native 로그인 (Expo Linking + intent-filter)
+- EAS dev build (Expo Go 푸시 한계 우회)
+
+### 라운드 사이즈
+- 변경 파일 수: 13개 (theme/Gradient는 5차 라운드에 이미 셋업, 6차는 그 위에 화면별 적용)
+  - owner: _layout / shifts / new-shift / cafes / payouts / shift\[id\] / worker-pool (7개)
+  - worker: profile / invitations (2개)
+  - components: WorkerHomeWidgets (1개)
+  - shared: cafe\[id\] (1개)
+- 톤 통일이 핵심. 기능·로직 변경 0.
+
+---
+
+## 2026-05-04 (5차) — 워커 UX 톤업: 단바 오렌지 컨셉 통일 (트랙 B)
+
+### 동기
+- 사용자 요청 "단바의 색을 주황색을 컨셉으로 UX/UI를 조금더 고도화 ... 워커부터, 조금더 세련되게"
+- 진단: primary 정의는 됐으나 화면에선 점점이 박힌 액센트 → 면 70%가 흰색·회색. 위젯 4개가 오렌지/녹색/노랑/회색 분산 → "오렌지 브랜드" 정체성 약함
+- 3개 트랙 제안 (A 색만 / B 색+카드 마감 / C 히어로 재설계) 중 **트랙 B 합의**
+
+### 결정 사항 (사용자 확정)
+- 그라디언트: `#FF6B35 → #E55A28` (hero 세로, CTA 가로)
+- 헤더: 흰 유지 + `primary50` 미세 와시
+- 단골 강조: warn(노랑) → **primary 오렌지**
+- 수입 카드: 녹색 → primary 톤 흡수
+
+### 1. 의존성 + theme 토큰 시스템
+- `expo-linear-gradient` 설치 (Expo SDK 54 호환)
+- `lib/theme.ts` 오렌지 9단계 추가 — `primary50/100/200/300/400/500/600/700/800/900`
+  - 50 `#FFF7F2` (헤더 wash) / 100 `#FFEEE2` (soft 칩) / 500 `#FF6B35` (primary alias) / 600 `#E55A28` (primaryDark alias) / 700 `#C44619` (강조 텍스트)
+  - 기존 `primary/primaryDark/primarySoft` alias 그대로 — 호환 유지
+- `gradients` 헬퍼: `brand` / `brandWarm` / `brandSoft`
+
+### 2. 신규 컴포넌트 — `components/Gradient.tsx`
+- `GradientCard` — hero 카드용 (props: colors, vertical, withShadow, onPress)
+- `GradientButton` — CTA 버튼용 (props: label, icon, size sm/md/lg)
+- `HeaderWash` — 흰 위 살짝 깔리는 brand 톤
+
+### 3. 워커 _layout 헤더 + 탭바
+- 헤더 배경 `colors.surface` → `colors.primary50` (와시)
+- 탭바 active indicator — 아이콘 위에 4×22px 오렌지 알약. focused 만 표시
+- 탭바 라벨 fontWeight 600 → 700, 높이 60→64
+
+### 4. 워커 홈 (`worker/home.tsx`)
+- 오늘의 매칭 — solid primary 카드 → `GradientCard` (세로 그라디언트, 18px 패딩, 자간 -0.5)
+- 이번주 받을 돈 — successSoft 녹색 → `primary50` 바탕 + `primary` 숫자 + `primary200` 보더
+- 내 평점·단골 — warnSoft 노랑 → `primary100` 바탕 + `primaryDark` 숫자 + `primary300` 보더 (강도 변주)
+- 단골 매장 새 시프트 칩 — successSoft → `primary50` + `primary` 보더 + `primaryDark` 텍스트
+- 빠른 진입 4개 — primarySoft/infoSoft/successSoft/warnSoft 분산 → primary 톤 4단계 변주
+  - 시프트 검색: solid `primary` (가장 강조, 흰 텍스트)
+  - 내 매칭: `primary100` (bordered)
+  - 정산: `primary50` (bordered)
+  - 내 문서: `primary50` (bordered)
+
+### 5. 워커 시프트 카드 (`worker/shifts.tsx`)
+- 단골 카드 borderLeft `warn` → `primary`, `warnSoft` 배경 → `primary50`, ⭐ 색 → `primary`
+- 매장 아바타 32→40px, radius 9→10, 아바타 글자 12→15
+- 매장명 15→16px (위계 강화)
+- 단골만 필터 칩 accent `warn` → `primary`
+- 요일 필터 칩 accent `warn` → `primary` (모든 활성 필터를 brand 통일)
+- 1탭 지원 버튼 — `Pressable + styles.buttonPrimary` → `GradientButton` size sm
+
+### 6. 워커 매칭 (`worker/matches.tsx`)
+- 출근 체크인 CTA — solid primary → `GradientButton` (size md)
+- 매장 평가하기 CTA — solid `warn` 노랑 → `GradientButton` (브랜드 통일)
+- 퇴근 체크아웃 CTA — `success` 녹색 유지 (= 작업 완료 의미 색)
+
+### 7. 워커 정산 (`worker/payouts.tsx`)
+- 큰 실수령 숫자 색 `success` → `primary` (수입 = 브랜드 가치)
+- 30분 SLA success/danger 의미 색은 유지
+
+### 8. 워커 마이 (`worker/me.tsx`)
+- 프로필 헤더 — 평면 카드 → `GradientCard` hero (오렌지 세로 그라디언트, 흰 텍스트)
+  - 아바타 56px + 흰 반투명 보더 ring
+  - 이름 22px 900wt 흰색
+  - WorkerTier · 등급뱃지 · 경력 모두 흰 톤으로
+  - 로그아웃 버튼 — `rgba(255,255,255,0.12)` 반투명 + 흰 텍스트
+- 누적 통계 4타일 — success/info/text 분산 → 누적 수입 1개만 brand 강조 (`primary50` 바탕 + `primary` 숫자 + `primary200` 보더), 나머지 3개는 흰 바탕 + text (위계 절제)
+- 선호 조건 평점 칩 active `warn` → `primary` (브랜드 통일)
+- PMF 시그널 (별점/재고용/노쇼) 의미 색은 유지
+
+### 톤 정책 (이번 라운드 정착)
+- **primary 오렌지**: 브랜드 액션 / 단골 / 수입 / 평점·등급 / CTA / 활성 필터
+- **success 녹색**: 작업 완료 의미만 (퇴근 체크아웃, 평가 완료 표시, 30분 SLA OK)
+- **warn 노랑**: 경고만 (프로필 미완성 안내, 모집중 status)
+- **danger 빨강**: 노쇼 / unread 채팅 / 거절
+- 별점 ★ 표시 자체는 노랑 유지 (직관적)
+
+### 시각 검증 (사용자 작업)
+- `cd /c/Programs/skima/server && ./mvnw spring-boot:run` (8090)
+- `cd /c/Programs/skima/client && npm run start -- --clear` (Metro 새 모듈 추가됐으므로 --clear 권장)
+- 워커 로그인(worker1/pw1234) → 홈/시프트/매칭/정산/마이 5개 화면 톤 확인
+- Native (Expo Go) + Web 둘 다 그라디언트 동작 확인 — `expo-linear-gradient` 가 두 플랫폼 모두 지원
+
+### 잔여 (다음 라운드)
+- **점주 화면 같은 톤 통일** (사용자 합의 시 별도 라운드)
+- 워커 stats/profile/documents/invitations hidden 화면도 톤 점검
+- WorkerHomeWidgets 컴포넌트 (me.tsx 헤더로 이주된 위젯) 색 통일 점검
+- saju 디자인 추가 참조 (BrandMark·하단 메뉴)
+- 보더 vs 그림자 둘 중 하나 통일 정책은 카드 단위로 점진 적용 — 이번 라운드는 신규 GradientCard 만 그림자, 기존 카드는 그대로 유지
+
+---
+
 ## 2026-05-04 (4차) — 카카오 매듭 + 매장 위치 수정 UX 보강
 
 ### 데이터 초기화

@@ -80,7 +80,9 @@ public class ComplianceService {
                 gross - withholding,
                 "일용근로자 (근로기준법 제18조 단시간근로자 / 1일 단위 근로계약)",
                 taxClause(),
-                LocalDateTime.now()
+                LocalDateTime.now(),
+                match.getOwnerAcknowledgedContractAt(),
+                match.getWorkerAcknowledgedContractAt()
         );
     }
 

@@ -27,6 +27,9 @@ public record MatchResponse(
         LocalDateTime payoutApprovedAt,
         Boolean payoutAutoApproved,
         LocalDateTime payoutCompletedAt,
+        // 근로계약서 양측 확인 시각
+        LocalDateTime ownerContractAckAt,
+        LocalDateTime workerContractAckAt,
         // 채팅 unread (워커 기준 — 점주가 보낸 메시지 중 워커가 안 본 것)
         long chatUnreadCount
 ) {
@@ -80,6 +83,8 @@ public record MatchResponse(
                 payoutApprovedAt,
                 payoutAutoApproved,
                 payoutCompletedAt,
+                m.getOwnerAcknowledgedContractAt(),
+                m.getWorkerAcknowledgedContractAt(),
                 chatUnreadCount
         );
     }

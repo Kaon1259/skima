@@ -23,7 +23,9 @@ public record PayoutResponse(
         boolean autoApproved,
         LocalDateTime completedAt,
         PayoutStatus status,
-        Long elapsedMinutes
+        Long elapsedMinutes,
+        // 점주 측 근로계약서 ack 시각 — 정산 승인 게이트용 (클라가 모달 열기 전 검사)
+        LocalDateTime ownerContractAckAt
 ) {
     public static PayoutResponse from(Payout p) {
         // 기준점: 점주 승인 시각이 있으면 그 후 SLA 측정, 아니면 triggerAt 기준 (완료까지)
@@ -51,7 +53,8 @@ public record PayoutResponse(
                 p.isAutoApproved(),
                 p.getCompletedAt(),
                 p.getStatus(),
-                elapsed
+                elapsed,
+                p.getMatch().getOwnerAcknowledgedContractAt()
         );
     }
 }

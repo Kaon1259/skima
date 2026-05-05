@@ -23,6 +23,9 @@ public record WorkerProfileUpdateRequest(
         Integer prefMinWage,
         Double prefMinCafeRating,
         Double prefMaxCafeNoShowRate,
-        Boolean updatePrefs
+        Boolean updatePrefs,
+        // 입금 계좌 (정산 입금용) — updateBankAccount=true 일 때만 갱신
+        String bankAccount,
+        Boolean updateBankAccount
 ) {
 }

@@ -29,6 +29,7 @@ public record OwnerShiftView(
         int pendingApplicationsCount,
         // 매칭/평가 정보 (있을 때)
         Long matchId,
+        Long matchedWorkerId,
         String matchedWorkerName,
         String matchStatus,
         Integer ratingScore,
@@ -40,6 +41,9 @@ public record OwnerShiftView(
         java.time.LocalDateTime payoutApprovedAt,
         Boolean payoutAutoApproved,
         java.time.LocalDateTime payoutCompletedAt,
+        // 근로계약서 양측 확인 시각 (timeline 표시 + 미확인 강조용)
+        java.time.LocalDateTime ownerContractAckAt,
+        java.time.LocalDateTime workerContractAckAt,
         // 직무·등급·자격 (Phase A 능력 매칭)
         JobRole jobRole,
         SkillLevel minSkill,
@@ -52,6 +56,7 @@ public record OwnerShiftView(
             int total,
             int pending,
             Long matchId,
+            Long matchedWorkerId,
             String matchedWorkerName,
             String matchStatus,
             Integer ratingScore,
@@ -61,6 +66,8 @@ public record OwnerShiftView(
             java.time.LocalDateTime payoutApprovedAt,
             Boolean payoutAutoApproved,
             java.time.LocalDateTime payoutCompletedAt,
+            java.time.LocalDateTime ownerContractAckAt,
+            java.time.LocalDateTime workerContractAckAt,
             long chatUnreadCount
     ) {
         Long matchMin = (s.getMatchedAt() != null && s.getCreatedAt() != null)
@@ -87,6 +94,7 @@ public record OwnerShiftView(
                 total,
                 pending,
                 matchId,
+                matchedWorkerId,
                 matchedWorkerName,
                 matchStatus,
                 ratingScore,
@@ -96,6 +104,8 @@ public record OwnerShiftView(
                 payoutApprovedAt,
                 payoutAutoApproved,
                 payoutCompletedAt,
+                ownerContractAckAt,
+                workerContractAckAt,
                 s.getJobRole(),
                 s.getMinSkill(),
                 s.getRequirements() == null ? new HashSet<>() : new HashSet<>(s.getRequirements()),

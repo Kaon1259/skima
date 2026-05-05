@@ -4,6 +4,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 
 import { Avatar } from '@/components/Avatar';
 import { ChatSheet } from '@/components/ChatSheet';
+import { GradientButton } from '@/components/Gradient';
 import { HealthCertBadge } from '@/components/HealthCertBadge';
 import { TrustScoreBadge } from '@/components/TrustScoreBadge';
 import { Icon } from '@/components/Icon';
@@ -69,6 +70,12 @@ export default function ShiftApplicantsScreen() {
     if (action === 'approve' && shift?.matchId && shift.matchedWorkerName
         && shift.payoutStatus === 'REQUESTED') {
       autoOpenedRef.current = true;
+      // 점주 ack 강제 게이트 — 안 됐으면 자동 모달 대신 계약서 화면으로 라우팅
+      if (!shift.ownerContractAckAt) {
+        notify('정산 전 근로계약서 확인이 필요합니다. 확인 화면으로 이동합니다.');
+        router.replace(`/owner/contract/${shift.matchId}?focus=ack` as never);
+        return;
+      }
       blurFocusedForModal();
       setApproveTarget({ matchId: shift.matchId, workerName: shift.matchedWorkerName });
     }
@@ -308,18 +315,14 @@ export default function ShiftApplicantsScreen() {
             ) : null}
 
             {item.status === 'PENDING' ? (
-              <Pressable
-                style={({ pressed }) => [
-                  styles.buttonPrimary,
-                  { marginTop: 14, flexDirection: 'row', gap: 6 },
-                  (busyId === item.id || pressed) && { opacity: 0.85 },
-                ]}
-                onPress={() => accept(item.id)}
-                disabled={busyId === item.id}
-              >
-                <Icon name="checkmark-circle" size={16} color="#fff" />
-                <Text style={styles.buttonPrimaryText}>매칭 확정</Text>
-              </Pressable>
+              <View style={{ marginTop: 14 }}>
+                <GradientButton
+                  onPress={() => accept(item.id)}
+                  disabled={busyId === item.id}
+                  label="매칭 확정"
+                  icon={<Icon name="checkmark-circle" size={16} color="#fff" />}
+                />
+              </View>
             ) : null}
           </View>
         );
@@ -392,9 +395,20 @@ function ShiftTimeline({
   const payoutDone = shift.payoutStatus === 'COMPLETED';
   const ownerRatingDone = shift.ratingScore != null;
   const workerRatingDone = !!shift.workerRatedOwner;
+  const ownerAcked = !!shift.ownerContractAckAt;
+  const workerAcked = !!shift.workerContractAckAt;
+  const matched = shift.matchedAt != null;
   const stages: { label: string; done: boolean; ts?: string | null; sub?: string }[] = [
     { label: '시프트 등록', done: true, ts: shift.createdAt },
-    { label: '매칭 확정', done: shift.matchedAt != null, ts: shift.matchedAt },
+    { label: '매칭 확정', done: matched, ts: shift.matchedAt },
+    { label: matched
+        ? (ownerAcked ? '점주 계약서 확인' : '점주 계약서 확인 대기')
+        : '점주 계약서 확인',
+      done: ownerAcked, ts: shift.ownerContractAckAt },
+    { label: matched
+        ? (workerAcked ? '워커 계약서 확인' : '워커 계약서 확인 대기')
+        : '워커 계약서 확인',
+      done: workerAcked, ts: shift.workerContractAckAt },
     { label: '출근 (체크인)', done: shift.matchStatus === 'CHECKED_IN' || checkedOut },
     { label: '퇴근 (체크아웃)', done: checkedOut },
     {
@@ -434,6 +448,73 @@ function ShiftTimeline({
       <Text style={[styles.bodyMuted, { marginBottom: 4 }]}>
         {fmtDateTime(shift.startAt)} ~ {fmtDateTime(shift.endAt)}
       </Text>
+
+      {/* 매칭 워커 진입 (있을 때만) */}
+      {shift.matchedWorkerName && shift.matchedWorkerId ? (
+        <Pressable
+          onPress={() => router.push(`/u/${shift.matchedWorkerId}` as never)}
+          style={({ pressed }) => [
+            {
+              marginTop: 8,
+              paddingVertical: 10,
+              paddingHorizontal: 12,
+              borderRadius: radius.md,
+              backgroundColor: colors.primary50,
+              borderWidth: 1,
+              borderColor: colors.primary200,
+              flexDirection: 'row',
+              alignItems: 'center',
+              gap: 10,
+            },
+            pressed && { opacity: 0.8 },
+          ]}
+        >
+          <Avatar name={shift.matchedWorkerName} size={32} />
+          <View style={{ flex: 1 }}>
+            <Text style={{ fontSize: 11, fontWeight: '800', color: colors.primary700, letterSpacing: 0.3 }}>
+              매칭 워커
+            </Text>
+            <Text style={{ fontSize: 14, fontWeight: '800', color: colors.text, marginTop: 1 }}>
+              {shift.matchedWorkerName}
+            </Text>
+          </View>
+          <Text style={{ fontSize: 11, fontWeight: '700', color: colors.primary }}>상세 ›</Text>
+        </Pressable>
+      ) : null}
+
+      {/* 점주 측 근로계약서 미확인 강조 — 매칭 직후 액션 유도 */}
+      {shift.matchId && shift.matchedWorkerName && !shift.ownerContractAckAt ? (
+        <Pressable
+          onPress={() => router.push(`/owner/contract/${shift.matchId}` as never)}
+          style={({ pressed }) => [
+            {
+              marginTop: 8,
+              paddingVertical: 12,
+              paddingHorizontal: 14,
+              borderRadius: radius.md,
+              backgroundColor: colors.warnSoft,
+              borderWidth: 1.5,
+              borderColor: colors.warn,
+              flexDirection: 'row',
+              alignItems: 'center',
+              gap: 10,
+            },
+            pressed && { opacity: 0.85 },
+          ]}
+        >
+          <Text style={{ fontSize: 22 }}>📄</Text>
+          <View style={{ flex: 1 }}>
+            <Text style={{ fontSize: 13, fontWeight: '900', color: colors.warn }}>
+              근로계약서 확인 필요
+            </Text>
+            <Text style={{ fontSize: 11, color: colors.text, marginTop: 2 }}>
+              근기법 17조 — 양측 확인이 분쟁 방어 자료가 됩니다
+            </Text>
+          </View>
+          <Text style={{ fontSize: 12, fontWeight: '700', color: colors.warn }}>확인 ›</Text>
+        </Pressable>
+      ) : null}
+
       <ShiftSkillBadges
         jobRole={shift.jobRole}
         minSkill={shift.minSkill}
@@ -470,18 +551,25 @@ function ShiftTimeline({
         ))}
       </View>
 
-      {/* 정산 승인 + 평가 — CHECKED_OUT + Payout REQUESTED */}
+      {/* 정산 승인 + 평가 — CHECKED_OUT + Payout REQUESTED. ack 강제 게이트 */}
       {shift.matchId && shift.matchedWorkerName && shift.payoutStatus === 'REQUESTED' ? (
-        <Pressable
-          style={[
-            styles.buttonPrimary,
-            { marginTop: 14, flexDirection: 'row', gap: 6, backgroundColor: colors.success },
-          ]}
-          onPress={() => onApprovePayout(shift.matchId!, shift.matchedWorkerName!)}
-        >
-          <Text style={{ fontSize: 14, color: '#fff' }}>💸</Text>
-          <Text style={styles.buttonPrimaryText}>정산 승인 + 평가</Text>
-        </Pressable>
+        <View style={{ marginTop: 14 }}>
+          <GradientButton
+            onPress={() => {
+              if (!shift.ownerContractAckAt) {
+                // ack 없으면 정산 모달 대신 계약서 화면으로 강제 라우팅
+                const msg = '정산 전 근로계약서 확인이 필요합니다. 확인 화면으로 이동합니다.';
+                if (Platform.OS === 'web') window.alert(msg);
+                else Alert.alert('확인 필요', msg);
+                router.push(`/owner/contract/${shift.matchId}?focus=ack` as never);
+                return;
+              }
+              onApprovePayout(shift.matchId!, shift.matchedWorkerName!);
+            }}
+            label={shift.ownerContractAckAt ? '정산 승인 + 평가' : '📄 계약서 확인 후 정산'}
+            icon={<Text style={{ fontSize: 14 }}>💸</Text>}
+          />
+        </View>
       ) : null}
 
       {/* 자동 승인된 케이스 — 평가만 별도로 남길 수 있음 */}

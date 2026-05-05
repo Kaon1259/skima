@@ -41,6 +41,10 @@ public class CheckInOutService {
         if (match.getStatus() != MatchStatus.MATCHED) {
             throw BusinessException.conflict("이미 체크인되었거나 종료된 매칭입니다");
         }
+        // 근로계약서 확인 게이트 — 워커가 ack 안 했으면 체크인 거부
+        if (match.getWorkerAcknowledgedContractAt() == null) {
+            throw BusinessException.badRequest("근로계약서를 먼저 확인해주세요. 매칭 카드의 '📄 근로계약서 확인' 배너를 탭해 동의하면 체크인 가능합니다.");
+        }
 
         var cafe = match.getShift().getCafe();
         Double cafeLat = cafe.getLatitude();

@@ -3,6 +3,7 @@ import { Alert, FlatList, Platform, Pressable, RefreshControl, Text, View } from
 import { router, useFocusEffect } from 'expo-router';
 
 import { EmptyState } from '@/components/EmptyState';
+import { GradientButton } from '@/components/Gradient';
 import { Icon } from '@/components/Icon';
 import { RatingModal, blurFocusedForModal } from '@/components/RatingModal';
 import { SkeletonList } from '@/components/Skeleton';
@@ -107,14 +108,14 @@ export default function OwnerPayoutsScreen() {
             {/* 헤더 KPI */}
             {payouts.length > 0 ? (
               <View style={{ marginBottom: spacing.md, gap: 10 }}>
-                <View style={[styles.card, { padding: 16 }]}>
-                  <Text style={{ fontSize: 11, color: colors.textMuted, fontWeight: '700' }}>
+                <View style={[styles.card, { padding: 16, borderWidth: 1, borderColor: colors.primary200, backgroundColor: colors.primary50 }]}>
+                  <Text style={{ fontSize: 11, color: colors.primary700, fontWeight: '800', letterSpacing: 0.3 }}>
                     이번달 총 지출 (임금 + 수수료)
                   </Text>
-                  <Text style={{ fontSize: 28, fontWeight: '900', color: colors.text, marginTop: 4 }}>
+                  <Text style={{ fontSize: 28, fontWeight: '900', color: colors.primary, marginTop: 4, letterSpacing: -0.6 }}>
                     {fmtKRW(kpis.monthlyTotal)}
                   </Text>
-                  <Text style={{ fontSize: 11, color: colors.textLight, marginTop: 4 }}>
+                  <Text style={{ fontSize: 11, color: colors.textSubtle, marginTop: 4 }}>
                     임금 {fmtKRW(kpis.monthlyGross)} · 수수료 {fmtKRW(kpis.monthlyFee)} · {kpis.monthCount}건 완료
                   </Text>
                 </View>
@@ -241,30 +242,27 @@ export default function OwnerPayoutsScreen() {
                 ) : null}
               </View>
 
-              {/* 액션 — 승인 대기일 때만 */}
+              {/* 액션 — 승인 대기일 때만. ack 강제 게이트 */}
               {needsApprove ? (
-                <Pressable
+                <GradientButton
                   onPress={() => {
+                    if (!item.ownerContractAckAt) {
+                      const msg = '정산 전 근로계약서 확인이 필요합니다. 확인 화면으로 이동합니다.';
+                      if (Platform.OS === 'web') window.alert(msg);
+                      else Alert.alert('확인 필요', msg);
+                      router.push(`/owner/contract/${item.matchId}?focus=ack` as never);
+                      return;
+                    }
                     blurFocusedForModal();
                     setApproveTarget({
                       matchId: item.matchId,
                       workerName: item.workerName ?? `워커 #${item.workerId}`,
                     });
                   }}
-                  style={({ pressed }) => [
-                    {
-                      flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-                      paddingVertical: 10, gap: 6,
-                      backgroundColor: colors.success, borderRadius: radius.md,
-                    },
-                    pressed && { opacity: 0.85 },
-                  ]}
-                >
-                  <Text style={{ fontSize: 14 }}>💸</Text>
-                  <Text style={{ fontSize: 13, fontWeight: '800', color: '#fff' }}>
-                    정산 승인 + 평가
-                  </Text>
-                </Pressable>
+                  label={item.ownerContractAckAt ? '정산 승인 + 평가' : '📄 계약서 확인 후 정산'}
+                  icon={<Text style={{ fontSize: 14 }}>💸</Text>}
+                  size="sm"
+                />
               ) : null}
             </View>
           );

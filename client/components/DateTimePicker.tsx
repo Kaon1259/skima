@@ -193,11 +193,13 @@ export function toServerDateTime(localIso: string): string {
   return `${datePart}T${pad(hh)}:${pad(mm)}:${pad(ss)}`;
 }
 
-/** 기본값: 오늘 날짜 + 다음 정시(예: 14:25 → 15:00) */
+/** 기본값: 내일 오전 9시 — 일반적인 매장 운영 시작 시각.
+ *  (오늘 1시간 후로 잡으면 데모/시드 환경에서 시드 시프트와 거의 항상 겹침,
+ *   실 운영에서도 점주가 1시간 안에 매칭 가능한 워커 모집은 드문 케이스.) */
 export function defaultStartLocal(): string {
   const d = new Date();
-  d.setMinutes(0, 0, 0);
-  d.setHours(d.getHours() + 1);
+  d.setDate(d.getDate() + 1);
+  d.setHours(9, 0, 0, 0);
   return toLocalIso(d);
 }
 

@@ -2,6 +2,7 @@ import { useCallback, useState } from 'react';
 import { Alert, Platform, Pressable, RefreshControl, ScrollView, Text, View } from 'react-native';
 import { router } from 'expo-router';
 
+import { GradientCard } from '@/components/Gradient';
 import { api } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { useFocusPolling } from '@/lib/useFocusPolling';
@@ -148,75 +149,76 @@ export default function WorkerHomeScreen() {
         </Pressable>
       ) : null}
 
-      {/* 위젯 1 — 오늘 매칭 */}
-      <Pressable
-        onPress={() => {
-          if (todayMatch) router.push(`/worker/matches?focus=${todayMatch.id}` as never);
-          else router.push('/worker/shifts' as never);
-        }}
-        style={({ pressed }) => [
-          {
-            padding: 16,
-            borderRadius: radius.lg,
-            backgroundColor: todayMatch ? colors.primary : colors.surface,
-            borderWidth: 1,
-            borderColor: todayMatch ? colors.primary : colors.border,
-            marginBottom: spacing.md,
-          },
-          pressed && { opacity: 0.9 },
-        ]}
-      >
-        <Text style={{ fontSize: 11, fontWeight: '800', color: todayMatch ? 'rgba(255,255,255,0.85)' : colors.textMuted, letterSpacing: 0.5 }}>
-          오늘의 매칭
-        </Text>
-        {todayMatch ? (
-          <>
-            <Text style={{ fontSize: 22, fontWeight: '900', color: '#fff', marginTop: 4 }}>
-              {todayMatch.cafeName ?? '매장'}
-            </Text>
-            <Text style={{ fontSize: 13, color: 'rgba(255,255,255,0.9)', marginTop: 4 }}>
-              {todayMatch.shiftStartAt ? fmtDateTime(todayMatch.shiftStartAt) : '시간 미정'}
-              {todayMatch.shiftEndAt ? ` ~ ${fmtDateTime(todayMatch.shiftEndAt)}` : ''}
-              {' · '}
-              {todayMatch.status === 'CHECKED_IN' ? '근무중' : todayMatch.status === 'MATCHED' ? '시작 대기' : todayMatch.status}
-            </Text>
-            <Text style={{ fontSize: 11, color: 'rgba(255,255,255,0.85)', marginTop: 8, fontWeight: '700' }}>
-              {todayMatch.status === 'CHECKED_IN'
-                ? '👉 탭해서 체크아웃 / 채팅'
-                : '👉 탭해서 체크인 / 채팅'}
-            </Text>
-            {todayMatch.chatUnreadCount && todayMatch.chatUnreadCount > 0 ? (
-              <View
-                style={{
-                  marginTop: 10,
-                  alignSelf: 'flex-start',
-                  paddingHorizontal: 10,
-                  paddingVertical: 5,
-                  borderRadius: radius.pill,
-                  backgroundColor: '#fff',
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                  gap: 5,
-                }}
-              >
-                <Text style={{ fontSize: 13 }}>💬</Text>
-                <Text style={{ fontSize: 12, fontWeight: '900', color: colors.danger }}>
-                  점주 새 메시지 {todayMatch.chatUnreadCount > 99 ? '99+' : todayMatch.chatUnreadCount}건
-                </Text>
-              </View>
-            ) : null}
-          </>
-        ) : (
-          <>
-            <Text style={{ fontSize: 18, fontWeight: '800', color: colors.text, marginTop: 4 }}>
-              오늘 일정 없음
-            </Text>
-            <Text style={{ fontSize: 12, color: colors.textMuted, marginTop: 4 }}>
-              새 시프트를 찾아보세요 👉
-            </Text>
-          </>
-        )}
-      </Pressable>
+      {/* 위젯 1 — 오늘 매칭 (hero) */}
+      {todayMatch ? (
+        <GradientCard
+          onPress={() => router.push(`/worker/matches?focus=${todayMatch.id}` as never)}
+          style={{ padding: 18, marginBottom: spacing.md }}
+        >
+          <Text style={{ fontSize: 11, fontWeight: '800', color: 'rgba(255,255,255,0.85)', letterSpacing: 0.5 }}>
+            오늘의 매칭
+          </Text>
+          <Text style={{ fontSize: 22, fontWeight: '900', color: '#fff', marginTop: 4, letterSpacing: -0.5 }}>
+            {todayMatch.cafeName ?? '매장'}
+          </Text>
+          <Text style={{ fontSize: 13, color: 'rgba(255,255,255,0.92)', marginTop: 4 }}>
+            {todayMatch.shiftStartAt ? fmtDateTime(todayMatch.shiftStartAt) : '시간 미정'}
+            {todayMatch.shiftEndAt ? ` ~ ${fmtDateTime(todayMatch.shiftEndAt)}` : ''}
+            {' · '}
+            {todayMatch.status === 'CHECKED_IN' ? '근무중' : todayMatch.status === 'MATCHED' ? '시작 대기' : todayMatch.status}
+          </Text>
+          <Text style={{ fontSize: 11, color: 'rgba(255,255,255,0.85)', marginTop: 10, fontWeight: '700' }}>
+            {todayMatch.status === 'CHECKED_IN'
+              ? '👉 탭해서 체크아웃 / 채팅'
+              : '👉 탭해서 체크인 / 채팅'}
+          </Text>
+          {todayMatch.chatUnreadCount && todayMatch.chatUnreadCount > 0 ? (
+            <View
+              style={{
+                marginTop: 10,
+                alignSelf: 'flex-start',
+                paddingHorizontal: 10,
+                paddingVertical: 5,
+                borderRadius: radius.pill,
+                backgroundColor: '#fff',
+                flexDirection: 'row',
+                alignItems: 'center',
+                gap: 5,
+              }}
+            >
+              <Text style={{ fontSize: 13 }}>💬</Text>
+              <Text style={{ fontSize: 12, fontWeight: '900', color: colors.danger }}>
+                점주 새 메시지 {todayMatch.chatUnreadCount > 99 ? '99+' : todayMatch.chatUnreadCount}건
+              </Text>
+            </View>
+          ) : null}
+        </GradientCard>
+      ) : (
+        <Pressable
+          onPress={() => router.push('/worker/shifts' as never)}
+          style={({ pressed }) => [
+            {
+              padding: 16,
+              borderRadius: radius.lg,
+              backgroundColor: colors.surface,
+              borderWidth: 1,
+              borderColor: colors.border,
+              marginBottom: spacing.md,
+            },
+            pressed && { opacity: 0.9 },
+          ]}
+        >
+          <Text style={{ fontSize: 11, fontWeight: '800', color: colors.textMuted, letterSpacing: 0.5 }}>
+            오늘의 매칭
+          </Text>
+          <Text style={{ fontSize: 18, fontWeight: '800', color: colors.text, marginTop: 4 }}>
+            오늘 일정 없음
+          </Text>
+          <Text style={{ fontSize: 12, color: colors.textMuted, marginTop: 4 }}>
+            새 시프트를 찾아보세요 👉
+          </Text>
+        </Pressable>
+      )}
 
       {/* 위젯 2 — 다음 매칭 */}
       {nextMatch ? (
@@ -252,7 +254,7 @@ export default function WorkerHomeScreen() {
         </Pressable>
       ) : null}
 
-      {/* 위젯 3 — 이번주 수입 + 위젯 4 — 평점/단골 (가로 2개) */}
+      {/* 위젯 3 — 이번주 수입 + 위젯 4 — 평점/단골 (가로 2개, 오렌지 톤 통일) */}
       <View style={{ flexDirection: 'row', gap: 8, marginBottom: spacing.md }}>
         <Pressable
           onPress={() => router.push('/worker/payouts' as never)}
@@ -261,18 +263,18 @@ export default function WorkerHomeScreen() {
               flex: 1,
               padding: 14,
               borderRadius: radius.md,
-              backgroundColor: colors.successSoft,
+              backgroundColor: colors.primary50,
               borderWidth: 1,
-              borderColor: colors.success,
+              borderColor: colors.primary200,
             },
             pressed && { opacity: 0.85 },
           ]}
         >
-          <Text style={{ fontSize: 11, fontWeight: '800', color: colors.success }}>이번주 받을 돈</Text>
-          <Text style={{ fontSize: 22, fontWeight: '900', color: colors.success, marginTop: 6, letterSpacing: -0.5 }}>
+          <Text style={{ fontSize: 11, fontWeight: '800', color: colors.primary700, letterSpacing: 0.3 }}>이번주 받을 돈</Text>
+          <Text style={{ fontSize: 22, fontWeight: '900', color: colors.primary, marginTop: 6, letterSpacing: -0.5 }}>
             {fmtKRW(weekIncome)}
           </Text>
-          <Text style={{ fontSize: 10, color: colors.text, marginTop: 4 }}>
+          <Text style={{ fontSize: 10, color: colors.textSubtle, marginTop: 4 }}>
             {weekIncomeStatusCount.pending > 0
               ? `정산 진행중 ${weekIncomeStatusCount.pending}건`
               : weekIncomeStatusCount.completed > 0
@@ -282,24 +284,24 @@ export default function WorkerHomeScreen() {
         </Pressable>
 
         <Pressable
-          onPress={() => router.push('/worker/stats' as never)}
+          onPress={() => router.push('/worker/me' as never)}
           style={({ pressed }) => [
             {
               flex: 1,
               padding: 14,
               borderRadius: radius.md,
-              backgroundColor: colors.warnSoft,
+              backgroundColor: colors.primary100,
               borderWidth: 1,
-              borderColor: colors.warn,
+              borderColor: colors.primary300,
             },
             pressed && { opacity: 0.85 },
           ]}
         >
-          <Text style={{ fontSize: 11, fontWeight: '800', color: colors.warn }}>내 평점 · 단골</Text>
-          <Text style={{ fontSize: 22, fontWeight: '900', color: colors.warn, marginTop: 6 }}>
+          <Text style={{ fontSize: 11, fontWeight: '800', color: colors.primary700, letterSpacing: 0.3 }}>내 평점 · 단골</Text>
+          <Text style={{ fontSize: 22, fontWeight: '900', color: colors.primaryDark, marginTop: 6 }}>
             {stats?.avgRating != null ? `★ ${stats.avgRating.toFixed(1)}` : '★ —'}
           </Text>
-          <Text style={{ fontSize: 10, color: colors.text, marginTop: 4 }}>
+          <Text style={{ fontSize: 10, color: colors.textSubtle, marginTop: 4 }}>
             평가 {stats?.ratingsCount ?? 0}개 · 단골 매장 {favCount}곳
           </Text>
         </Pressable>
@@ -321,16 +323,16 @@ export default function WorkerHomeScreen() {
                     paddingVertical: 12,
                     paddingHorizontal: 14,
                     borderRadius: radius.md,
-                    backgroundColor: colors.successSoft,
+                    backgroundColor: colors.primary50,
                     borderWidth: 1.5,
-                    borderColor: colors.success,
+                    borderColor: colors.primary,
                     minWidth: 200,
                     maxWidth: 260,
                   },
                   pressed && { opacity: 0.85 },
                 ]}
               >
-                <Text style={{ fontSize: 13, fontWeight: '800', color: colors.success }} numberOfLines={1}>
+                <Text style={{ fontSize: 13, fontWeight: '800', color: colors.primaryDark }} numberOfLines={1}>
                   {it.title}
                 </Text>
                 <Text style={{ fontSize: 11, color: colors.text, marginTop: 4 }} numberOfLines={2}>
@@ -399,24 +401,31 @@ export default function WorkerHomeScreen() {
         <Text style={{ fontSize: 16, color: colors.primary }}>›</Text>
       </Pressable>
 
-      {/* 빠른 진입 */}
+      {/* 빠른 진입 — 오렌지 톤 통일 (강도 변주로 위계) */}
       <View style={{ flexDirection: 'row', gap: 8, marginTop: spacing.md }}>
         <Pressable
           onPress={() => router.push('/worker/shifts' as never)}
           style={({ pressed }) => [
-            { flex: 1, padding: 14, borderRadius: radius.md, backgroundColor: colors.primarySoft, alignItems: 'center' },
-            pressed && { opacity: 0.85 },
+            {
+              flex: 1, padding: 14, borderRadius: radius.md,
+              backgroundColor: colors.primary, alignItems: 'center',
+            },
+            pressed && { opacity: 0.88 },
           ]}
         >
           <Text style={{ fontSize: 22 }}>⚡</Text>
-          <Text style={{ fontSize: 12, fontWeight: '800', color: colors.primaryDark, marginTop: 4 }}>
+          <Text style={{ fontSize: 12, fontWeight: '800', color: '#fff', marginTop: 4 }}>
             시프트 검색
           </Text>
         </Pressable>
         <Pressable
           onPress={() => router.push('/worker/matches' as never)}
           style={({ pressed }) => [
-            { flex: 1, padding: 14, borderRadius: radius.md, backgroundColor: colors.infoSoft, alignItems: 'center' },
+            {
+              flex: 1, padding: 14, borderRadius: radius.md,
+              backgroundColor: colors.primary100, alignItems: 'center',
+              borderWidth: 1, borderColor: colors.primary200,
+            },
             pressed && { opacity: 0.85 },
           ]}
         >
@@ -436,7 +445,7 @@ export default function WorkerHomeScreen() {
                   alignItems: 'center',
                   justifyContent: 'center',
                   borderWidth: 2,
-                  borderColor: colors.infoSoft,
+                  borderColor: colors.primary100,
                 }}
               >
                 <Text style={{ fontSize: 10, fontWeight: '900', color: '#fff' }}>
@@ -445,31 +454,39 @@ export default function WorkerHomeScreen() {
               </View>
             ) : null}
           </View>
-          <Text style={{ fontSize: 12, fontWeight: '800', color: colors.info, marginTop: 4 }}>
+          <Text style={{ fontSize: 12, fontWeight: '800', color: colors.primary700, marginTop: 4 }}>
             내 매칭
           </Text>
         </Pressable>
         <Pressable
           onPress={() => router.push('/worker/payouts' as never)}
           style={({ pressed }) => [
-            { flex: 1, padding: 14, borderRadius: radius.md, backgroundColor: colors.successSoft, alignItems: 'center' },
+            {
+              flex: 1, padding: 14, borderRadius: radius.md,
+              backgroundColor: colors.primary50, alignItems: 'center',
+              borderWidth: 1, borderColor: colors.primary200,
+            },
             pressed && { opacity: 0.85 },
           ]}
         >
           <Text style={{ fontSize: 22 }}>💰</Text>
-          <Text style={{ fontSize: 12, fontWeight: '800', color: colors.success, marginTop: 4 }}>
+          <Text style={{ fontSize: 12, fontWeight: '800', color: colors.primary700, marginTop: 4 }}>
             정산
           </Text>
         </Pressable>
         <Pressable
           onPress={() => router.push('/worker/documents' as never)}
           style={({ pressed }) => [
-            { flex: 1, padding: 14, borderRadius: radius.md, backgroundColor: colors.warnSoft, alignItems: 'center' },
+            {
+              flex: 1, padding: 14, borderRadius: radius.md,
+              backgroundColor: colors.primary50, alignItems: 'center',
+              borderWidth: 1, borderColor: colors.primary200,
+            },
             pressed && { opacity: 0.85 },
           ]}
         >
           <Text style={{ fontSize: 22 }}>📄</Text>
-          <Text style={{ fontSize: 12, fontWeight: '800', color: colors.warn, marginTop: 4 }}>
+          <Text style={{ fontSize: 12, fontWeight: '800', color: colors.primary700, marginTop: 4 }}>
             내 문서
           </Text>
         </Pressable>

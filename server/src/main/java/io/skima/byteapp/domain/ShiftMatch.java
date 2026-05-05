@@ -52,6 +52,14 @@ public class ShiftMatch {
     @Column(name = "worker_chat_seen_at")
     private LocalDateTime workerChatSeenAt;
 
+    /** 워커가 근로계약서를 확인한 시각 (양측 동의 트래킹 — 분쟁 방어 + 근기법 17조 입증) */
+    @Column(name = "worker_ack_contract_at")
+    private LocalDateTime workerAcknowledgedContractAt;
+
+    /** 점주가 근로계약서를 확인한 시각 */
+    @Column(name = "owner_ack_contract_at")
+    private LocalDateTime ownerAcknowledgedContractAt;
+
     @Builder
     public ShiftMatch(Shift shift, User worker) {
         this.shift = shift;
@@ -84,5 +92,17 @@ public class ShiftMatch {
 
     public void cancel() {
         this.status = MatchStatus.CANCELED;
+    }
+
+    public void acknowledgeContractByWorker(LocalDateTime at) {
+        if (this.workerAcknowledgedContractAt == null) {
+            this.workerAcknowledgedContractAt = at;
+        }
+    }
+
+    public void acknowledgeContractByOwner(LocalDateTime at) {
+        if (this.ownerAcknowledgedContractAt == null) {
+            this.ownerAcknowledgedContractAt = at;
+        }
     }
 }

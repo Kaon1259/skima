@@ -3,6 +3,7 @@ import { Alert, FlatList, Platform, Pressable, RefreshControl, Text, TextInput, 
 import { router } from 'expo-router';
 
 import { initialFor } from '@/components/Avatar';
+import { GradientButton } from '@/components/Gradient';
 import { Icon } from '@/components/Icon';
 import { RatingModal, blurFocusedForModal } from '@/components/RatingModal';
 import ShiftSkillBadges from '@/components/ShiftSkillBadges';
@@ -210,10 +211,10 @@ export default function OwnerShiftsScreen() {
             />
             <Text style={{ position: 'absolute', left: 14, top: 14, fontSize: 16 }}>🔍</Text>
           </View>
-          {/* 빠른 진입 — 세로 레이아웃 (아이콘 위 / 라벨 아래) 균등 정렬 */}
+          {/* 빠른 진입 — 워커풀(단골) 가운데 강조, 양쪽 보조 */}
           <View style={{ flexDirection: 'row', gap: 10, marginBottom: 16 }}>
             <QuickLink emoji="📚" label="히스토리" sub="지난 시프트" onPress={() => router.push('/owner/history')} />
-            <QuickLink emoji="👥" label="워커 풀" sub="단골 워커" onPress={() => router.push('/owner/worker-pool')} />
+            <QuickLink emoji="👥" label="워커 풀" sub="단골 워커" highlight onPress={() => router.push('/owner/worker-pool')} />
             <QuickLink emoji="🗓️" label="템플릿" sub="반복 시프트" onPress={() => router.push('/owner/shift-templates')} />
           </View>
             </>
@@ -234,26 +235,12 @@ export default function OwnerShiftsScreen() {
               시급·시간을 입력하면 1시간 안에 워커가 매칭돼요{'\n'}
               매칭된 시프트는 정산 완료까지 첫 화면에 계속 노출됩니다
             </Text>
-            <Pressable
+            <GradientButton
               onPress={() => router.push('/owner/new-shift')}
-              style={({ pressed }) => [
-                {
-                  paddingVertical: 14,
-                  paddingHorizontal: 28,
-                  borderRadius: radius.md,
-                  backgroundColor: colors.primary,
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                  gap: 8,
-                },
-                pressed && { opacity: 0.85 },
-              ]}
-            >
-              <Text style={{ fontSize: 18 }}>⚡</Text>
-              <Text style={{ fontSize: 15, fontWeight: '800', color: '#fff' }}>
-                첫 시프트 등록하기
-              </Text>
-            </Pressable>
+              label="첫 시프트 등록하기"
+              icon={<Text style={{ fontSize: 18 }}>⚡</Text>}
+              size="lg"
+            />
           </View>
         ) : shifts.length > 0 ? (
           // 시프트는 있는데 필터·검색 결과 없음
@@ -548,11 +535,13 @@ function QuickLink({
   label,
   sub,
   onPress,
+  highlight,
 }: {
   emoji: string;
   label: string;
   sub?: string;
   onPress: () => void;
+  highlight?: boolean;
 }) {
   return (
     <Pressable
@@ -564,12 +553,12 @@ function QuickLink({
           paddingHorizontal: 8,
           borderRadius: radius.md,
           borderWidth: 1,
-          borderColor: colors.border,
-          backgroundColor: colors.surface,
+          borderColor: highlight ? colors.primary300 : colors.border,
+          backgroundColor: highlight ? colors.primary100 : colors.surface,
           alignItems: 'center',
           gap: 4,
         },
-        pressed && { opacity: 0.75, backgroundColor: colors.surfaceAlt },
+        pressed && { opacity: 0.75 },
       ]}
     >
       <Text style={{ fontSize: 22, lineHeight: 26 }}>{emoji}</Text>
@@ -577,7 +566,7 @@ function QuickLink({
         style={{
           fontSize: 12,
           fontWeight: '800',
-          color: colors.text,
+          color: highlight ? colors.primary700 : colors.text,
           letterSpacing: -0.3,
           lineHeight: 16,
         }}
@@ -589,7 +578,7 @@ function QuickLink({
         <Text
           style={{
             fontSize: 10,
-            color: colors.textMuted,
+            color: highlight ? colors.primary600 : colors.textMuted,
             letterSpacing: -0.2,
             lineHeight: 12,
           }}
@@ -780,18 +769,26 @@ function ShiftCard({
         </View>
       </Pressable>
 
-      {/* 매칭/평가 정보 (완료된 시프트) */}
+      {/* 매칭/평가 정보 (완료된 시프트) — 워커 영역 탭하면 워커 상세 진입 */}
       {shift.matchedWorkerName ? (
-        <View
-          style={{
-            marginTop: 10,
-            padding: 12,
-            borderRadius: radius.md,
-            backgroundColor: rated ? colors.successSoft : completedReady ? colors.warnSoft : colors.surfaceAlt,
-            flexDirection: 'row',
-            alignItems: 'center',
-            gap: 8,
+        <Pressable
+          onPress={(e) => {
+            e.stopPropagation?.();
+            if (shift.matchedWorkerId) router.push(`/u/${shift.matchedWorkerId}` as never);
           }}
+          disabled={!shift.matchedWorkerId}
+          style={({ pressed }) => [
+            {
+              marginTop: 10,
+              padding: 12,
+              borderRadius: radius.md,
+              backgroundColor: rated ? colors.successSoft : completedReady ? colors.warnSoft : colors.surfaceAlt,
+              flexDirection: 'row',
+              alignItems: 'center',
+              gap: 8,
+            },
+            pressed && shift.matchedWorkerId ? { opacity: 0.7 } : null,
+          ]}
         >
           <View
             style={{
@@ -808,9 +805,14 @@ function ShiftCard({
             </Text>
           </View>
           <View style={{ flex: 1 }}>
-            <Text style={{ fontSize: 13, fontWeight: '700', color: colors.text }}>
-              {shift.matchedWorkerName}
-            </Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+              <Text style={{ fontSize: 13, fontWeight: '700', color: colors.text }}>
+                {shift.matchedWorkerName}
+              </Text>
+              {shift.matchedWorkerId ? (
+                <Icon name="chevron-forward" size={12} color={colors.textLight} />
+              ) : null}
+            </View>
             {rated ? (
               <Text style={{ fontSize: 12, color: colors.success, marginTop: 2, fontWeight: '600' }}>
                 {'★'.repeat(shift.ratingScore!)}{'☆'.repeat(5 - shift.ratingScore!)} {shift.willRehire ? '· 재고용 의향' : ''}
@@ -846,18 +848,54 @@ function ShiftCard({
           ) : null}
           {needsRating ? (
             <Pressable
-              onPress={onRate}
+              onPress={(e) => {
+                e.stopPropagation?.();
+                onRate();
+              }}
               style={{
                 paddingHorizontal: 12,
                 paddingVertical: 6,
                 borderRadius: radius.pill,
-                backgroundColor: colors.warn,
+                backgroundColor: colors.primary,
               }}
             >
               <Text style={{ color: '#fff', fontSize: 12, fontWeight: '700' }}>평가하기</Text>
             </Pressable>
           ) : null}
-        </View>
+        </Pressable>
+      ) : null}
+
+      {/* 점주 측 근로계약서 미확인 — 매칭 직후 ~ 정산 전까지 노출. 정산 전 확인 필수 (강제 게이트) */}
+      {shift.matchId && shift.matchedWorkerName
+        && !shift.ownerContractAckAt
+        && shift.payoutStatus !== 'COMPLETED' ? (
+        <Pressable
+          onPress={(e) => {
+            e.stopPropagation?.();
+            router.push(`/owner/contract/${shift.matchId}?focus=ack` as never);
+          }}
+          style={({ pressed }) => [
+            {
+              marginTop: 8,
+              paddingVertical: 8,
+              paddingHorizontal: 12,
+              borderRadius: radius.md,
+              backgroundColor: colors.warnSoft,
+              borderWidth: 1,
+              borderColor: colors.warn,
+              flexDirection: 'row',
+              alignItems: 'center',
+              gap: 6,
+            },
+            pressed && { opacity: 0.85 },
+          ]}
+        >
+          <Text style={{ fontSize: 12 }}>📄</Text>
+          <Text style={{ flex: 1, fontSize: 11, fontWeight: '800', color: colors.warn }}>
+            근로계약서 확인 필요 — 정산 전 필수
+          </Text>
+          <Text style={{ fontSize: 11, color: colors.warn, fontWeight: '700' }}>›</Text>
+        </Pressable>
       ) : null}
 
       {/* 액션 행: 복제 / 취소 */}

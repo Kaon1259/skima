@@ -256,16 +256,24 @@ function DashboardShiftCard({ shift, status }: { shift: OwnerShift; status: Stat
       ) : null}
 
       {status === 'matched' && shift.matchedWorkerName ? (
-        <View
-          style={{
-            marginTop: 10,
-            padding: 10,
-            borderRadius: radius.md,
-            backgroundColor: startSoon ? colors.warnSoft : colors.successSoft,
-            flexDirection: 'row',
-            alignItems: 'center',
-            gap: 8,
+        <Pressable
+          onPress={(e) => {
+            e.stopPropagation?.();
+            if (shift.matchedWorkerId) router.push(`/u/${shift.matchedWorkerId}` as never);
           }}
+          disabled={!shift.matchedWorkerId}
+          style={({ pressed }) => [
+            {
+              marginTop: 10,
+              padding: 10,
+              borderRadius: radius.md,
+              backgroundColor: startSoon ? colors.warnSoft : colors.successSoft,
+              flexDirection: 'row',
+              alignItems: 'center',
+              gap: 8,
+            },
+            pressed && shift.matchedWorkerId ? { opacity: 0.7 } : null,
+          ]}
         >
           <View
             style={{
@@ -282,53 +290,80 @@ function DashboardShiftCard({ shift, status }: { shift: OwnerShift; status: Stat
             </Text>
           </View>
           <View style={{ flex: 1 }}>
-            <Text style={{ fontSize: 13, fontWeight: '800', color: colors.text }}>
-              {shift.matchedWorkerName}
-            </Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+              <Text style={{ fontSize: 13, fontWeight: '800', color: colors.text }}>
+                {shift.matchedWorkerName}
+              </Text>
+              {shift.matchedWorkerId ? (
+                <Icon name="chevron-forward" size={11} color={colors.textLight} />
+              ) : null}
+            </View>
             <Text style={{ fontSize: 11, color: colors.textMuted, marginTop: 1 }}>
               {shift.minutesUntilStart != null
                 ? fmtRelativeMinutes(shift.minutesUntilStart)
                 : '시작 대기'}
             </Text>
           </View>
-        </View>
+        </Pressable>
       ) : null}
 
       {status === 'in-progress' && shift.matchedWorkerName ? (
-        <View
-          style={{
-            marginTop: 10,
-            padding: 10,
-            borderRadius: radius.md,
-            backgroundColor: colors.primarySoft,
-            flexDirection: 'row',
-            alignItems: 'center',
-            gap: 8,
+        <Pressable
+          onPress={(e) => {
+            e.stopPropagation?.();
+            if (shift.matchedWorkerId) router.push(`/u/${shift.matchedWorkerId}` as never);
           }}
+          disabled={!shift.matchedWorkerId}
+          style={({ pressed }) => [
+            {
+              marginTop: 10,
+              padding: 10,
+              borderRadius: radius.md,
+              backgroundColor: colors.primarySoft,
+              flexDirection: 'row',
+              alignItems: 'center',
+              gap: 8,
+            },
+            pressed && shift.matchedWorkerId ? { opacity: 0.7 } : null,
+          ]}
         >
           <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: colors.primary }} />
           <Text style={{ flex: 1, fontSize: 12, fontWeight: '700', color: colors.primaryDark }}>
             {shift.matchedWorkerName} · 근무 중 (체크인됨)
           </Text>
-        </View>
+          {shift.matchedWorkerId ? (
+            <Icon name="chevron-forward" size={12} color={colors.primary} />
+          ) : null}
+        </Pressable>
       ) : null}
 
       {status === 'completed' && shift.matchedWorkerName ? (
-        <View
-          style={{
-            marginTop: 10,
-            padding: 10,
-            borderRadius: radius.md,
-            backgroundColor:
-              shift.payoutStatus === 'COMPLETED' && shift.ratingScore != null
-                ? colors.successSoft
-                : colors.warnSoft,
+        <Pressable
+          onPress={(e) => {
+            e.stopPropagation?.();
+            if (shift.matchedWorkerId) router.push(`/u/${shift.matchedWorkerId}` as never);
           }}
+          disabled={!shift.matchedWorkerId}
+          style={({ pressed }) => [
+            {
+              marginTop: 10,
+              padding: 10,
+              borderRadius: radius.md,
+              backgroundColor:
+                shift.payoutStatus === 'COMPLETED' && shift.ratingScore != null
+                  ? colors.successSoft
+                  : colors.warnSoft,
+            },
+            pressed && shift.matchedWorkerId ? { opacity: 0.7 } : null,
+          ]}
         >
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
             <Text style={{ fontSize: 12, fontWeight: '800', color: colors.text }}>
               {shift.matchedWorkerName}
             </Text>
+            {shift.matchedWorkerId ? (
+              <Icon name="chevron-forward" size={11} color={colors.textLight} />
+            ) : null}
             {shift.ratingScore != null ? (
               <Text style={{ fontSize: 11, color: colors.warn, fontWeight: '700' }}>
                 {'★'.repeat(shift.ratingScore)}{'☆'.repeat(5 - shift.ratingScore)}
@@ -342,7 +377,7 @@ function DashboardShiftCard({ shift, status }: { shift: OwnerShift; status: Stat
             {' · '}
             {shift.workerRatedOwner ? '✓ 매장 평가 받음' : '— 매장 평가 대기'}
           </Text>
-        </View>
+        </Pressable>
       ) : null}
     </Pressable>
   );

@@ -283,6 +283,24 @@ public class WorkerController {
         return complianceService.buildContractForWorker(principal.getDomainUser(), matchId);
     }
 
+    /** 워커 측 근로계약서 확인 동의 — 본인 매칭만, 1회 기록 (이후 호출은 무시) */
+    @PostMapping("/matches/{matchId}/contract/ack")
+    @Transactional
+    public Map<String, Object> ackContract(@AuthenticationPrincipal AuthUser principal,
+                                            @PathVariable Long matchId) {
+        ShiftMatch m = matchRepository.findById(matchId)
+                .orElseThrow(() -> new IllegalArgumentException("매칭을 찾을 수 없어요"));
+        if (!m.getWorker().getId().equals(principal.getDomainUser().getId())) {
+            throw new IllegalStateException("본인 매칭이 아닙니다");
+        }
+        m.acknowledgeContractByWorker(java.time.LocalDateTime.now());
+        Map<String, Object> result = new HashMap<>();
+        result.put("workerAcknowledgedContractAt", m.getWorkerAcknowledgedContractAt().toString());
+        result.put("ownerAcknowledgedContractAt",
+                m.getOwnerAcknowledgedContractAt() != null ? m.getOwnerAcknowledgedContractAt().toString() : null);
+        return result;
+    }
+
     /** 내 원천징수영수증 — 본인 매칭만 조회 */
     @GetMapping("/matches/{matchId}/withholding")
     public WithholdingReceiptResponse withholding(@AuthenticationPrincipal AuthUser principal,

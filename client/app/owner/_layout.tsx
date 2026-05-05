@@ -11,13 +11,38 @@ import { colors } from '@/lib/theme';
 
 const isWeb = Platform.OS === 'web';
 
+function TabIconWithIndicator({
+  focused,
+  size,
+  name,
+}: {
+  focused: boolean;
+  size?: number;
+  name: 'list' | 'add-circle' | 'cafe' | 'wallet';
+}) {
+  return (
+    <View style={{ alignItems: 'center', justifyContent: 'flex-start', height: 28 }}>
+      <View
+        style={{
+          height: 3,
+          width: 22,
+          borderRadius: 999,
+          backgroundColor: focused ? colors.primary : 'transparent',
+          marginBottom: 4,
+        }}
+      />
+      <Icon name={name} size={size ?? 22} color={focused ? colors.primary : colors.textLight} />
+    </View>
+  );
+}
+
 export default function OwnerLayout() {
   return (
     <AuthGate role="OWNER">
       <Tabs
         {...(isWeb && { safeAreaInsets: { top: 0, right: 0, bottom: 0, left: 0 } })}
         screenOptions={{
-          headerStyle: { backgroundColor: colors.surface },
+          headerStyle: { backgroundColor: colors.primary50 },
           headerTintColor: colors.text,
           headerTitleStyle: { fontWeight: '800', fontSize: 18 },
           headerShadowVisible: false,
@@ -31,9 +56,9 @@ export default function OwnerLayout() {
           tabBarStyle: {
             backgroundColor: colors.surface,
             borderTopColor: colors.border,
-            ...(isWeb ? { height: 60, paddingTop: 6, paddingBottom: 6 } : { paddingTop: 6 }),
+            ...(isWeb ? { height: 64, paddingTop: 4, paddingBottom: 6 } : { paddingTop: 4 }),
           },
-          tabBarLabelStyle: { fontSize: 11, fontWeight: '600', marginBottom: 2 },
+          tabBarLabelStyle: { fontSize: 11, fontWeight: '700', marginBottom: 2 },
           tabBarActiveTintColor: colors.primary,
           tabBarInactiveTintColor: colors.textLight,
         }}
@@ -42,28 +67,36 @@ export default function OwnerLayout() {
           name="shifts"
           options={{
             title: '시프트',
-            tabBarIcon: ({ size }) => <Icon name="list" size={size ?? 22} />,
+            tabBarIcon: ({ focused, size }) => (
+              <TabIconWithIndicator focused={focused} size={size} name="list" />
+            ),
           }}
         />
         <Tabs.Screen
           name="new-shift"
           options={{
             title: '시프트 등록',
-            tabBarIcon: ({ size }) => <Icon name="add-circle" size={size ?? 22} />,
+            tabBarIcon: ({ focused, size }) => (
+              <TabIconWithIndicator focused={focused} size={size} name="add-circle" />
+            ),
           }}
         />
         <Tabs.Screen
           name="cafes"
           options={{
             title: '내 매장',
-            tabBarIcon: ({ size }) => <Icon name="cafe" size={size ?? 22} />,
+            tabBarIcon: ({ focused, size }) => (
+              <TabIconWithIndicator focused={focused} size={size} name="cafe" />
+            ),
           }}
         />
         <Tabs.Screen
           name="payouts"
           options={{
             title: '정산',
-            tabBarIcon: ({ size }) => <Icon name="wallet" size={size ?? 22} />,
+            tabBarIcon: ({ focused, size }) => (
+              <TabIconWithIndicator focused={focused} size={size} name="wallet" />
+            ),
           }}
         />
         <Tabs.Screen name="statement" options={{ href: null, title: '월간명세' }} />
