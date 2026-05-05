@@ -26,4 +26,11 @@ public interface DisputeRepository extends JpaRepository<Dispute, Long> {
             order by d.createdAt desc
             """)
     List<Dispute> findAllByOwnerId(@Param("ownerId") Long ownerId);
+
+    @Query("""
+            select d from Dispute d
+            where d.match.worker.id = :workerId
+            order by d.createdAt desc
+            """)
+    List<Dispute> findAllByMatchWorkerId(@Param("workerId") Long workerId);
 }

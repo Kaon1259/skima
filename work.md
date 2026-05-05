@@ -4,6 +4,51 @@
 
 ---
 
+## 2026-05-05 (14차) — 추천 점수 노출 + 분쟁 알림 + 분쟁 내역 화면 (D + G + F 일괄)
+
+### 동기 (사용자 합의)
+- D: 워커 시프트 카드 추천 점수 노출 — 투명성 ("왜 이 시프트가 추천?")
+- G: 분쟁 자동 판정 결과 알림 — 양측에 발송 (대칭)
+- F: `/owner/disputes` + `/worker/disputes` 본인 분쟁 내역 화면
+
+### D — 추천 점수 노출 (`worker/shifts.tsx`)
+- `recommendScore(shift)` 콜백 추가 — sort 로직과 동일 공식 (TrustScore·별점·노쇼·거리·시급 + 단골/능력 가산)
+- 추천 정렬 시 카드 헤더 "🎯 추천" 뱃지 → "🎯 추천 N점" (0~100)
+- 기존 추천 이유 뱃지(최대 3개) 는 그대로 유지
+
+### G — DISPUTE_RESOLVED 알림 type
+- 백엔드 `NotificationService` 에 `DisputeRepository` 주입 + import
+- `forOwner`: `findAllByOwnerId(ownerId)` 결과 중 `RESOLVED + resolvedAt > 1주일` 발행
+- `forWorker`: 신규 `findAllByMatchWorkerId(workerId)` Repository 메서드 추가 + 동일 로직
+- title: "이의 제기 결과: 인정/기각/중립"
+- subtitle: "{매장명} · {워커명} — {resolutionNote}"
+- severity: 신고자 vs 피신고자 관점 분기 (REPORTER_WINS=신고자success/피신고자warn)
+- route: `/owner/disputes` 또는 `/worker/disputes`
+- types.ts NotificationItem.type 동기화 + NotificationBell TYPE_ICON `alert-circle`
+
+### F — 분쟁 내역 화면 (점주/워커)
+- `client/app/owner/disputes.tsx` 신설
+  - `GET /api/disputes` 호출 (Spring 측에서 자동으로 owner 본인 매장 매칭 분쟁 반환)
+  - 카드: 사유 emoji + 상태 뱃지(PENDING/RESOLVED/DISMISSED) + 매장/워커명 + 신고자 + 상세 코멘트 + 판정 결과 박스
+  - 상세 카드 탭 → `/owner/shift/{shiftId}` 진입
+- `client/app/worker/disputes.tsx` 신설
+  - 동일 API (Spring 자동 분기), 신고자=본인 케이스만 노출
+  - 탭 동작 없음 (cafeId 없어 단순 표시)
+- 양쪽 _layout.tsx 에 hidden 라우트 등록 (`disputes`)
+- 진입: 알림 클릭 (DISPUTE_RESOLVED route 가 disputes 화면으로 라우팅)
+
+### 검증
+- `tsc --noEmit` exit 0
+- 백엔드 재기동 — DisputeRepository 추가 메서드 + NotificationService 변경 반영
+- 추후 폰 검증: 매칭 종료 → 워커 노쇼 처리 → 워커가 NO_SHOW_DISPUTE 이의 제기 → 1시간+ 후 cron 자동 판정 → 양측 알림함에 결과 도착 → 알림 클릭 → 분쟁 내역 화면 진입
+
+### 잔여
+- (E) 카카오 native 로그인 — 사용자 보류 결정
+- AWS IAM 키 폐기 (P0 — 사용자 보류)
+- 분쟁 화면 진입 버튼을 owner/payouts·worker/me 등에 추가 (지금은 알림으로만 진입 가능)
+
+---
+
 ## 2026-05-05 (13차) — 점주 분쟁 신고 UI + 자동 판정 cron + 매장 사진 변경 UX 픽스
 
 ### 동기 (사용자 요청)

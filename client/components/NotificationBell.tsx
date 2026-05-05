@@ -38,6 +38,7 @@ const TYPE_ICON: Record<NotificationItem['type'], string> = {
   SHIFT_CANCELED: 'alert-circle',
   WORKER_CONTRACT_ACK: 'document-text',
   CONTRACT_ACK_REQUIRED: 'document-text',
+  DISPUTE_RESOLVED: 'alert-circle',
   FAVORITE_CAFE_NEW_SHIFT: 'star',
 };
 

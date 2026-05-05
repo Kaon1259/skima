@@ -107,6 +107,7 @@ export default function OwnerLayout() {
         <Tabs.Screen name="history" options={{ href: null, title: '시프트 히스토리' }} />
         <Tabs.Screen name="worker-pool" options={{ href: null, title: '워커 풀' }} />
         <Tabs.Screen name="shift-templates" options={{ href: null, title: '시프트 템플릿' }} />
+        <Tabs.Screen name="disputes" options={{ href: null, title: '이의 제기 내역' }} />
       </Tabs>
     </AuthGate>
   );

@@ -127,6 +127,27 @@ export default function WorkerShiftsScreen() {
     [myLevelRank, myRolesSet, myCertsSet],
   );
 
+  // 추천 정렬 시 카드에 노출할 점수 (0~100) — sort 로직과 동일 공식 (단골/능력 가산 포함)
+  const recommendScore = useCallback(
+    (s: WorkerShift): number => {
+      let total = 0;
+      total += (s.cafeTrustScore ?? 50) * 0.25;
+      total += (s.cafeAvgRating != null ? s.cafeAvgRating * 20 : 50) * 0.20;
+      total += ((1 - (s.cafeNoShowRate ?? 0.1)) * 100) * 0.10;
+      const d = (myCoords && s.cafeLatitude != null && s.cafeLongitude != null)
+        ? distanceKm(myCoords, { latitude: s.cafeLatitude, longitude: s.cafeLongitude })
+        : null;
+      const distScore = d == null ? 50 : Math.max(0, 100 - (d / 30) * 100);
+      total += distScore * 0.15;
+      const wageScore = Math.min(100, Math.max(0, ((s.hourlyWage - 8000) / 12000) * 100));
+      total += wageScore * 0.10;
+      if (favIds.has(s.cafeId) || s.isFavoriteCafe) total += 15;
+      if (isFitForMe(s)) total += 5;
+      return Math.round(Math.min(100, Math.max(0, total)));
+    },
+    [myCoords, favIds, isFitForMe],
+  );
+
   // 추천 정렬 시 카드에 노출할 추천 이유 — score 가중치 기여도 큰 시그널부터 최대 3개
   const recommendReasons = useCallback(
     (s: WorkerShift): string[] => {
@@ -840,7 +861,9 @@ export default function WorkerShiftsScreen() {
                   }}
                 >
                   <Text style={{ fontSize: 10 }}>🎯</Text>
-                  <Text style={{ fontSize: 10, fontWeight: '900', color: '#fff' }}>추천</Text>
+                  <Text style={{ fontSize: 10, fontWeight: '900', color: '#fff' }}>
+                    추천 {recommendScore(item)}점
+                  </Text>
                 </View>
                 {reasons.map((r, i) => (
                   <View

@@ -1,6 +1,9 @@
 package io.skima.byteapp.service;
 
 import io.skima.byteapp.domain.ApplicationStatus;
+import io.skima.byteapp.domain.Dispute;
+import io.skima.byteapp.domain.DisputeStatus;
+import io.skima.byteapp.domain.DisputeVerdict;
 import io.skima.byteapp.domain.MatchStatus;
 import io.skima.byteapp.domain.Payout;
 import io.skima.byteapp.domain.PayoutStatus;
@@ -11,6 +14,7 @@ import io.skima.byteapp.domain.ShiftApplication;
 import io.skima.byteapp.domain.ShiftMatch;
 import io.skima.byteapp.domain.User;
 import io.skima.byteapp.dto.NotificationItem;
+import io.skima.byteapp.repository.DisputeRepository;
 import io.skima.byteapp.repository.PayoutRepository;
 import io.skima.byteapp.repository.RatingRepository;
 import io.skima.byteapp.repository.ShiftApplicationRepository;
@@ -37,6 +41,7 @@ public class NotificationService {
     private final PayoutRepository payoutRepository;
     private final UserRepository userRepository;
     private final io.skima.byteapp.repository.WorkerFavoriteCafeRepository workerFavRepository;
+    private final DisputeRepository disputeRepository;
 
     @Transactional(readOnly = true)
     public List<NotificationItem> forOwner(User owner) {
@@ -173,6 +178,24 @@ public class NotificationService {
                     r.getMatch().getId(),
                     r.getCreatedAt(),
                     r.getScore() >= 4 ? "success" : "warn"));
+        }
+
+        // 5) 분쟁 자동 판정 결과 — 최근 7일 RESOLVED 만 (점주 측: 본인 매장 매칭 모두 노출)
+        for (Dispute d : disputeRepository.findAllByOwnerId(owner.getId())) {
+            if (d.getStatus() != DisputeStatus.RESOLVED) continue;
+            if (d.getResolvedAt() == null || d.getResolvedAt().isBefore(weekAgo)) continue;
+            boolean isReporter = d.getReporter().getId().equals(owner.getId());
+            String workerName = d.getMatch().getWorker().getName();
+            String cafeName = d.getMatch().getShift().getCafe().getName();
+            String note = d.getResolutionNote() == null ? "" : d.getResolutionNote();
+            raws.add(new Raw(
+                    "DISPUTE_RESOLVED",
+                    "이의 제기 결과: " + verdictLabel(d.getVerdict()),
+                    cafeName + " · " + workerName + (note.isEmpty() ? "" : " — " + note),
+                    "/owner/disputes",
+                    d.getId(),
+                    d.getResolvedAt(),
+                    verdictSeverity(d.getVerdict(), isReporter)));
         }
 
         // unread 판정 + 정렬 + 최대 30건 제한 (점주 알림 과다 방지)
@@ -365,6 +388,23 @@ public class NotificationService {
                     "success"));
         }
 
+        // 6) 분쟁 자동 판정 결과 — 최근 7일 RESOLVED. 워커 측 (본인 매칭 관련 모두)
+        for (Dispute d : disputeRepository.findAllByMatchWorkerId(worker.getId())) {
+            if (d.getStatus() != DisputeStatus.RESOLVED) continue;
+            if (d.getResolvedAt() == null || d.getResolvedAt().isBefore(weekAgo)) continue;
+            boolean isReporter = d.getReporter().getId().equals(worker.getId());
+            String cafeName = d.getMatch().getShift().getCafe().getName();
+            String note = d.getResolutionNote() == null ? "" : d.getResolutionNote();
+            raws.add(new Raw(
+                    "DISPUTE_RESOLVED",
+                    "이의 제기 결과: " + verdictLabel(d.getVerdict()),
+                    cafeName + (note.isEmpty() ? "" : " — " + note),
+                    "/worker/disputes",
+                    d.getId(),
+                    d.getResolvedAt(),
+                    verdictSeverity(d.getVerdict(), isReporter)));
+        }
+
         LocalDateTime seenAt = worker.getLastNotificationSeenAt();
         return raws.stream()
                 .sorted(Comparator.comparing(Raw::at).reversed())
@@ -389,5 +429,24 @@ public class NotificationService {
         if (t == null) return "";
         return String.format("%02d/%02d %02d:%02d",
                 t.getMonthValue(), t.getDayOfMonth(), t.getHour(), t.getMinute());
+    }
+
+    private static String verdictLabel(DisputeVerdict v) {
+        if (v == null) return "처리됨";
+        return switch (v) {
+            case REPORTER_WINS -> "인정";
+            case RESPONDENT_WINS -> "기각";
+            case NEUTRAL -> "중립 (운영자 검토)";
+        };
+    }
+
+    /** 신고자/피신고자 관점에 따라 success vs warn 분기. NEUTRAL 은 항상 info */
+    private static String verdictSeverity(DisputeVerdict v, boolean isReporter) {
+        if (v == null) return "info";
+        return switch (v) {
+            case REPORTER_WINS -> isReporter ? "success" : "warn";
+            case RESPONDENT_WINS -> isReporter ? "warn" : "success";
+            case NEUTRAL -> "info";
+        };
     }
 }

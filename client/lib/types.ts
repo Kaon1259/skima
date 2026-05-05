@@ -308,6 +308,7 @@ export type NotificationItem = {
     | 'SHIFT_CANCELED'
     | 'WORKER_CONTRACT_ACK'
     | 'CONTRACT_ACK_REQUIRED'
+    | 'DISPUTE_RESOLVED'
     | 'FAVORITE_CAFE_NEW_SHIFT';
   title: string;
   subtitle: string;

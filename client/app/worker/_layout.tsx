@@ -103,6 +103,7 @@ export default function WorkerLayout() {
       <Tabs.Screen name="profile" options={{ href: null, title: '내 프로필' }} />
       <Tabs.Screen name="documents" options={{ href: null, title: '내 문서' }} />
       <Tabs.Screen name="invitations" options={{ href: null, title: '점주 직접 호출' }} />
+      <Tabs.Screen name="disputes" options={{ href: null, title: '이의 제기 내역' }} />
       </Tabs>
     </AuthGate>
   );
