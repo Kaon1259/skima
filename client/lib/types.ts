@@ -1,10 +1,19 @@
-export type CafeType = 'FRANCHISE_CAFE' | 'INDIVIDUAL_CAFE' | 'FRANCHISE_BAKERY' | 'INDIVIDUAL_BAKERY';
+export type CafeType =
+  | 'FRANCHISE_CAFE' | 'INDIVIDUAL_CAFE'
+  | 'FRANCHISE_BAKERY' | 'INDIVIDUAL_BAKERY'
+  // Phase 2 — 펍·이자카야·와인바
+  | 'FRANCHISE_PUB' | 'INDIVIDUAL_PUB'
+  | 'IZAKAYA' | 'WINE_BAR';
 
 export const CAFE_TYPE_LABEL: Record<CafeType, string> = {
   FRANCHISE_CAFE: '프렌차이즈 카페',
   INDIVIDUAL_CAFE: '개인 카페',
   FRANCHISE_BAKERY: '프렌차이즈 베이커리',
   INDIVIDUAL_BAKERY: '개인 베이커리',
+  FRANCHISE_PUB: '프렌차이즈 펍',
+  INDIVIDUAL_PUB: '개인 펍',
+  IZAKAYA: '이자카야',
+  WINE_BAR: '와인바',
 };
 
 export type Brand = {
@@ -387,7 +396,8 @@ export type JobRole =
   | 'BAKER'
   | 'KITCHEN'
   | 'OPENING'
-  | 'CLOSING';
+  | 'CLOSING'
+  | 'BARTENDER';
 
 export const JOB_ROLE_LABEL: Record<JobRole, { label: string; emoji: string; desc: string }> = {
   BARISTA: { label: '바리스타', emoji: '☕', desc: '음료 제조·라떼아트' },
@@ -397,6 +407,7 @@ export const JOB_ROLE_LABEL: Record<JobRole, { label: string; emoji: string; des
   KITCHEN: { label: '주방 보조', emoji: '🧽', desc: '설거지·재료 준비' },
   OPENING: { label: '오픈 전담', emoji: '🌅', desc: '개점·세팅' },
   CLOSING: { label: '마감 전담', emoji: '🌙', desc: '청소·정산·마감' },
+  BARTENDER: { label: '바텐더', emoji: '🍸', desc: '칵테일·주류·페어링' },
 };
 
 export type SkillLevel = 'L1_TRAINEE' | 'L2_BASIC' | 'L3_SKILLED' | 'L4_EXPERT';

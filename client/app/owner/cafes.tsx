@@ -33,6 +33,11 @@ const TYPE_OPTIONS: { key: CafeType; label: string; emoji: string }[] = [
   { key: 'INDIVIDUAL_CAFE', label: '개인 카페', emoji: '🏠' },
   { key: 'FRANCHISE_BAKERY', label: '프렌차이즈 베이커리', emoji: '🥐' },
   { key: 'INDIVIDUAL_BAKERY', label: '개인 베이커리', emoji: '🥖' },
+  // Phase 2 — 펍·이자카야·와인바
+  { key: 'FRANCHISE_PUB', label: '프렌차이즈 펍', emoji: '🍺' },
+  { key: 'INDIVIDUAL_PUB', label: '개인 펍', emoji: '🍻' },
+  { key: 'IZAKAYA', label: '이자카야', emoji: '🏮' },
+  { key: 'WINE_BAR', label: '와인바', emoji: '🍷' },
 ];
 
 export default function OwnerCafesScreen() {
@@ -171,7 +176,7 @@ export default function OwnerCafesScreen() {
       notify('매장 종류를 선택해주세요');
       return;
     }
-    const isFranchise = cafeType === 'FRANCHISE_CAFE' || cafeType === 'FRANCHISE_BAKERY';
+    const isFranchise = cafeType === 'FRANCHISE_CAFE' || cafeType === 'FRANCHISE_BAKERY' || cafeType === 'FRANCHISE_PUB';
     if (isFranchise && !brand) {
       notify('프렌차이즈는 브랜드를 선택해야 합니다');
       return;
@@ -648,7 +653,7 @@ function RegisterForm({
       setBusyLoc(false);
     }
   };
-  const isFranchise = cafeType === 'FRANCHISE_CAFE' || cafeType === 'FRANCHISE_BAKERY';
+  const isFranchise = cafeType === 'FRANCHISE_CAFE' || cafeType === 'FRANCHISE_BAKERY' || cafeType === 'FRANCHISE_PUB';
   const [pickerOpen, setPickerOpen] = useState(false);
   const [kakaoOpen, setKakaoOpen] = useState(false);
 

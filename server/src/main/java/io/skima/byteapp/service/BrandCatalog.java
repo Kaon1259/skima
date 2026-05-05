@@ -37,7 +37,17 @@ public class BrandCatalog {
             new BrandResponse("dunkin",     "던킨",             CafeType.FRANCHISE_BAKERY, "던킨",  "#FF6B1A", "도넛+커피"),
             new BrandResponse("breadnco",   "브레댄코",         CafeType.FRANCHISE_BAKERY, "브레",  "#8B5A2B", "베이커리 카페 콘셉트"),
             new BrandResponse("paingdefranc","뺑드프랑스",       CafeType.FRANCHISE_BAKERY, "뺑드",  "#7A1F2B", "프랑스풍 빵집"),
-            new BrandResponse("ibagel",     "아이엠베이글",      CafeType.FRANCHISE_BAKERY, "베이",  "#D4A24C", "베이글 전문")
+            new BrandResponse("ibagel",     "아이엠베이글",      CafeType.FRANCHISE_BAKERY, "베이",  "#D4A24C", "베이글 전문"),
+
+            // Phase 2 — 펍·이자카야·와인바 (저녁 피크 + 노쇼 0% 가치 max)
+            new BrandResponse("wabar",      "WaBar",             CafeType.FRANCHISE_PUB, "와바",  "#D4A24C", "1세대 호프 프렌차이즈"),
+            new BrandResponse("100hop",     "100호프",           CafeType.FRANCHISE_PUB, "100",   "#FFD400", "저가 호프, 야간 피크"),
+            new BrandResponse("hofbabe",    "호프베이브",         CafeType.FRANCHISE_PUB, "호프",  "#7A1F2B", "이태원·홍대 강세"),
+            new BrandResponse("birra",      "비라",               CafeType.FRANCHISE_PUB, "비라",  "#3A2A1A", "수제맥주 프렌차이즈"),
+            new BrandResponse("moru",       "모루이자카야",       CafeType.IZAKAYA, "모루",  "#1A1A1A", "이자카야 프렌차이즈, 사케·꼬치"),
+            new BrandResponse("torien",     "토리엔",             CafeType.IZAKAYA, "토리",  "#7A1F2B", "야키토리 전문 이자카야"),
+            new BrandResponse("winenmore",  "와인앤모어",         CafeType.WINE_BAR, "와인",  "#5C1F3A", "와인 다이닝, 페어링"),
+            new BrandResponse("vinit",      "비니트",             CafeType.WINE_BAR, "비니",  "#8B1A1A", "내추럴 와인 바")
     );
 
     public List<BrandResponse> findByType(CafeType type) {
