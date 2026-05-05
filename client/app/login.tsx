@@ -17,7 +17,12 @@ import * as Linking from 'expo-linking';
 
 import { useAuth } from '@/lib/auth';
 import { ApiError } from '@/lib/api';
-import { buildKakaoAuthorizeUrl, KAKAO_REDIRECT_URI } from '@/lib/config';
+import {
+  buildKakaoAuthorizeUrl,
+  getApiBase,
+  KAKAO_REDIRECT_URI,
+  useApiBaseChoice,
+} from '@/lib/config';
 import { colors, radius, spacing, styles } from '@/lib/theme';
 
 const SEED_ACCOUNTS: { id: string; label: string; sub: string; tag: string }[] = [
@@ -32,6 +37,7 @@ export default function LoginScreen() {
   const [username, setUsername] = useState('worker1');
   const [password, setPassword] = useState('pw1234');
   const [busy, setBusy] = useState(false);
+  const [apiChoice, setApiChoice] = useApiBaseChoice();
 
   /** Native 카카오 로그인 — expo-web-browser 인증 세션 + skima:// deep-link */
   async function handleKakaoNative() {
@@ -98,7 +104,7 @@ export default function LoginScreen() {
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
-        <View style={{ marginBottom: 36, alignItems: 'flex-start' }}>
+        <View style={{ marginBottom: 24, alignItems: 'flex-start' }}>
           <Image
             source={require('@/assets/images/icon.png')}
             style={{
@@ -111,6 +117,49 @@ export default function LoginScreen() {
           />
           <Text style={[styles.subtitle, { marginTop: 4, fontSize: 14 }]}>
             1시간 매칭 · 30분 입금
+          </Text>
+        </View>
+
+        {/* API 서버 선택 토글 — 로컬 vs Railway */}
+        <View style={{ marginBottom: 24 }}>
+          <Text style={[styles.subtitle, { fontSize: 11, marginBottom: 6 }]}>
+            서버
+          </Text>
+          <View style={{ flexDirection: 'row', gap: 6 }}>
+            {(['local', 'railway'] as const).map((c) => {
+              const active = apiChoice === c;
+              return (
+                <Pressable
+                  key={c}
+                  onPress={() => setApiChoice(c)}
+                  style={({ pressed }) => [
+                    {
+                      flex: 1,
+                      paddingVertical: 8,
+                      borderRadius: radius.md,
+                      borderWidth: 1.5,
+                      borderColor: active ? colors.primary : colors.border,
+                      backgroundColor: active ? colors.primarySoft : colors.surface,
+                      alignItems: 'center',
+                    },
+                    pressed && { opacity: 0.7 },
+                  ]}
+                >
+                  <Text
+                    style={{
+                      fontSize: 12,
+                      fontWeight: '800',
+                      color: active ? colors.primary : colors.textMuted,
+                    }}
+                  >
+                    {c === 'local' ? '🏠 로컬' : '☁️ Railway'}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+          <Text style={{ marginTop: 4, fontSize: 10, color: colors.textLight }} numberOfLines={1}>
+            {getApiBase()}
           </Text>
         </View>
 

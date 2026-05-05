@@ -1,5 +1,5 @@
-import { useCallback, useMemo, useState } from 'react';
-import { Alert, FlatList, Platform, Pressable, RefreshControl, Text, TextInput, View } from 'react-native';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Alert, Animated, Easing, FlatList, Platform, Pressable, RefreshControl, Text, TextInput, View } from 'react-native';
 import { router } from 'expo-router';
 
 import { initialFor } from '@/components/Avatar';
@@ -20,6 +20,22 @@ import {
   fmtRelativeMinutes,
 } from '@/lib/types';
 import { colors, radius, spacing, statusVisual, styles } from '@/lib/theme';
+
+/** "근무 중" 같은 짧은 라벨에 펄스 애니메이션 — opacity 1.0 ↔ 0.4 */
+function PulsingText({ children, style }: { children: React.ReactNode; style?: any }) {
+  const opacity = useRef(new Animated.Value(1)).current;
+  useEffect(() => {
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(opacity, { toValue: 0.4, duration: 700, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+        Animated.timing(opacity, { toValue: 1, duration: 700, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+      ]),
+    );
+    loop.start();
+    return () => { loop.stop(); };
+  }, [opacity]);
+  return <Animated.Text style={[style, { opacity }]}>{children}</Animated.Text>;
+}
 
 export default function OwnerShiftsScreen() {
   const [shifts, setShifts] = useState<OwnerShift[]>([]);
@@ -211,10 +227,10 @@ export default function OwnerShiftsScreen() {
             />
             <Text style={{ position: 'absolute', left: 14, top: 14, fontSize: 16 }}>🔍</Text>
           </View>
-          {/* 빠른 진입 — 워커풀(단골) 가운데 강조, 양쪽 보조 */}
+          {/* 빠른 진입 — 모두 동일 비중. 처음에는 어떤 것도 사전 선택되어 있지 않음 */}
           <View style={{ flexDirection: 'row', gap: 10, marginBottom: 16 }}>
             <QuickLink emoji="📚" label="히스토리" sub="지난 시프트" onPress={() => router.push('/owner/history')} />
-            <QuickLink emoji="👥" label="워커 풀" sub="단골 워커" highlight onPress={() => router.push('/owner/worker-pool')} />
+            <QuickLink emoji="👥" label="워커 풀" sub="단골 워커" onPress={() => router.push('/owner/worker-pool')} />
             <QuickLink emoji="🗓️" label="템플릿" sub="반복 시프트" onPress={() => router.push('/owner/shift-templates')} />
           </View>
             </>
@@ -674,15 +690,23 @@ function ShiftCard({
   const rated = shift.ratingScore != null;
   const needsRating = completedReady && !rated;
 
+  const inProgress = shift.status === 'IN_PROGRESS';
+  const matchedActive = shift.status === 'MATCHED' && !!shift.matchedWorkerName;
+
   return (
     <View
       style={[
         styles.card,
+        // 단바 주황 단일 톤 + intensity 로 상태 강조 — 우선순위: pending > inProgress > matched > unread
         hasPending
-          ? { borderWidth: 1.5, borderColor: colors.primary }
-          : hasUnread
-            ? { borderWidth: 1.5, borderColor: colors.danger }
-            : null,
+          ? { borderWidth: 2, borderColor: colors.primary500, backgroundColor: colors.primary50 }
+          : inProgress
+            ? { borderWidth: 2, borderColor: colors.primary500, backgroundColor: colors.primary100 }
+            : matchedActive
+              ? { borderWidth: 1.5, borderColor: colors.primary300, backgroundColor: colors.primary50 }
+              : hasUnread
+                ? { borderLeftWidth: 4, borderLeftColor: colors.primary500 }
+                : null,
       ]}
     >
       <Pressable onPress={() => router.push(`/owner/shift/${shift.id}`)}>
@@ -699,7 +723,11 @@ function ShiftCard({
             ) : null}
           </View>
           <View style={[styles.badge, { backgroundColor: v.bg }]}>
-            <Text style={[styles.badgeText, { color: v.fg }]}>{v.label}</Text>
+            {inProgress ? (
+              <PulsingText style={[styles.badgeText, { color: v.fg }]}>● {v.label}</PulsingText>
+            ) : (
+              <Text style={[styles.badgeText, { color: v.fg }]}>{v.label}</Text>
+            )}
           </View>
         </View>
 
@@ -782,7 +810,7 @@ function ShiftCard({
               marginTop: 10,
               padding: 12,
               borderRadius: radius.md,
-              backgroundColor: rated ? colors.successSoft : completedReady ? colors.warnSoft : colors.surfaceAlt,
+              backgroundColor: rated ? colors.successSoft : completedReady ? colors.warnSoft : colors.surface,
               flexDirection: 'row',
               alignItems: 'center',
               gap: 8,
@@ -821,9 +849,15 @@ function ShiftCard({
               <Text style={{ fontSize: 12, color: colors.warn, marginTop: 2, fontWeight: '600' }}>
                 평가 대기 중
               </Text>
+            ) : shift.matchStatus === 'CHECKED_IN' ? (
+              <PulsingText
+                style={{ fontSize: 12, color: colors.success, marginTop: 2, fontWeight: '700' }}
+              >
+                ● 근무 중
+              </PulsingText>
             ) : (
               <Text style={{ fontSize: 12, color: colors.textMuted, marginTop: 2 }}>
-                {shift.matchStatus === 'CHECKED_IN' ? '근무 중' : shift.matchStatus === 'MATCHED' ? '매칭 확정 — 근무 시작 대기' : shift.matchStatus}
+                {shift.matchStatus === 'MATCHED' ? '매칭 확정 — 근무 시작 대기' : shift.matchStatus}
               </Text>
             )}
           </View>

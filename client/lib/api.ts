@@ -1,4 +1,4 @@
-import { API_BASE_URL } from './config';
+import { getApiBase } from './config';
 import { loadAuth } from './storage';
 import { pushToastGlobal } from './toast';
 
@@ -59,7 +59,7 @@ async function fetchOnce(path: string, opts: ReqOpts): Promise<Response> {
   };
   if (auth) headers['Authorization'] = auth;
 
-  return fetch(`${API_BASE_URL}${path}`, {
+  return fetch(`${getApiBase()}${path}`, {
     method,
     headers,
     body: body !== undefined ? JSON.stringify(body) : undefined,

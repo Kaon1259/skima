@@ -164,8 +164,20 @@ export default function WorkerMatchesScreen() {
         }
         renderItem={({ item }) => {
           const v = statusVisual(item.status);
+          const isMatched = item.status === 'MATCHED';
+          const isCheckedIn = item.status === 'CHECKED_IN';
           return (
-            <View style={styles.card}>
+            <View
+              style={[
+                styles.card,
+                // 단바 주황 단일 톤 — 진행 단계에 따라 강조 intensity 증가
+                isCheckedIn
+                  ? { borderWidth: 2, borderColor: colors.primary500, backgroundColor: colors.primary100 }
+                  : isMatched
+                    ? { borderWidth: 1.5, borderColor: colors.primary300, backgroundColor: colors.primary50 }
+                    : null,
+              ]}
+            >
               <View style={{ flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between' }}>
                 <Pressable
                   style={({ pressed }) => [{ flex: 1, paddingRight: 8 }, pressed && item.cafeId ? { opacity: 0.7 } : null]}
@@ -201,9 +213,9 @@ export default function WorkerMatchesScreen() {
                       paddingVertical: 12,
                       paddingHorizontal: 14,
                       borderRadius: radius.md,
-                      backgroundColor: colors.warnSoft,
+                      backgroundColor: colors.surface,
                       borderWidth: 1.5,
-                      borderColor: colors.warn,
+                      borderColor: colors.primary500,
                       flexDirection: 'row',
                       alignItems: 'center',
                       gap: 10,
@@ -213,14 +225,14 @@ export default function WorkerMatchesScreen() {
                 >
                   <Text style={{ fontSize: 22 }}>📄</Text>
                   <View style={{ flex: 1 }}>
-                    <Text style={{ fontSize: 13, fontWeight: '900', color: colors.warn }}>
+                    <Text style={{ fontSize: 13, fontWeight: '900', color: colors.primary700 }}>
                       근로계약서 확인 필요
                     </Text>
                     <Text style={{ fontSize: 11, color: colors.text, marginTop: 2 }}>
                       근로조건·시급·근무시간 미리 확인하세요
                     </Text>
                   </View>
-                  <Text style={{ fontSize: 12, fontWeight: '700', color: colors.warn }}>확인 ›</Text>
+                  <Text style={{ fontSize: 12, fontWeight: '700', color: colors.primary600 }}>확인 ›</Text>
                 </Pressable>
               ) : null}
 
@@ -318,18 +330,14 @@ export default function WorkerMatchesScreen() {
               ) : null}
 
               {item.status === 'CHECKED_IN' ? (
-                <Pressable
-                  style={({ pressed }) => [
-                    styles.buttonPrimary,
-                    { marginTop: 14, backgroundColor: colors.success, flexDirection: 'row', gap: 6 },
-                    (busyId === item.id || pressed) && { opacity: 0.85 },
-                  ]}
-                  onPress={() => checkOut(item.id)}
-                  disabled={busyId === item.id}
-                >
-                  <Icon name="log-out" size={16} color="#fff" />
-                  <Text style={styles.buttonPrimaryText}>퇴근 체크아웃 (정산 시작)</Text>
-                </Pressable>
+                <View style={{ marginTop: 14 }}>
+                  <GradientButton
+                    onPress={() => checkOut(item.id)}
+                    disabled={busyId === item.id}
+                    label="퇴근 체크아웃 (정산 시작)"
+                    icon={<Icon name="log-out" size={16} color="#fff" />}
+                  />
+                </View>
               ) : null}
 
               {item.status === 'CHECKED_OUT' ? (

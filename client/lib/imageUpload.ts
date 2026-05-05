@@ -1,7 +1,7 @@
 import * as ImagePicker from 'expo-image-picker';
 import { Platform } from 'react-native';
 
-import { API_BASE_URL } from './config';
+import { getApiBase } from './config';
 import { loadAuth } from './storage';
 
 /**
@@ -51,7 +51,7 @@ export async function pickAndUploadImage(endpoint: string): Promise<string> {
   if (stored?.basicHeader) headers['Authorization'] = stored.basicHeader;
   // Content-Type 은 FormData 가 자동 설정하게 둠
 
-  const res = await fetch(`${API_BASE_URL}${endpoint}`, {
+  const res = await fetch(`${getApiBase()}${endpoint}`, {
     method: 'POST',
     headers,
     body: formData,
@@ -77,7 +77,7 @@ export async function deleteImage(endpoint: string): Promise<void> {
   const headers: Record<string, string> = {};
   if (stored?.basicHeader) headers['Authorization'] = stored.basicHeader;
 
-  const res = await fetch(`${API_BASE_URL}${endpoint}`, {
+  const res = await fetch(`${getApiBase()}${endpoint}`, {
     method: 'DELETE',
     headers,
   });

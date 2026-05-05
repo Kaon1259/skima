@@ -229,21 +229,25 @@ type StatusVisual = { bg: string; fg: string; label: string };
 
 export function statusVisual(status: string): StatusVisual {
   switch (status) {
+    // 단바 라이프사이클 상태들 — 주황 intensity 로 진행 단계 표현
     case 'OPEN':
-      return { bg: colors.warnSoft, fg: colors.warn, label: '모집중' };
+      // 모집중 — 가장 연한 주황 (정적 대기)
+      return { bg: colors.primary50, fg: colors.primary600, label: '모집중' };
     case 'PENDING':
       return { bg: colors.warnSoft, fg: colors.warn, label: '대기중' };
     case 'REQUESTED':
       return { bg: colors.warnSoft, fg: colors.warn, label: '점주 승인 대기' };
     case 'SCHEDULED':
-      return { bg: colors.infoSoft, fg: colors.info, label: '입금 예정' };
+      // 입금 예정 — 부드러운 주황 (브랜드 동선)
+      return { bg: colors.primary50, fg: colors.primary600, label: '입금 예정' };
     case 'MATCHED':
-      return { bg: colors.infoSoft, fg: colors.info, label: '매칭 완료' };
     case 'ACCEPTED':
-      return { bg: colors.infoSoft, fg: colors.info, label: '확정' };
+      // 매칭/확정 — 중간 주황
+      return { bg: colors.primary100, fg: colors.primary700, label: status === 'MATCHED' ? '매칭 완료' : '확정' };
     case 'CHECKED_IN':
     case 'IN_PROGRESS':
-      return { bg: colors.infoSoft, fg: colors.info, label: '근무중' };
+      // 근무중 — 가장 진한 단바 색 (live)
+      return { bg: colors.primary500, fg: '#FFFFFF', label: '근무중' };
     case 'CHECKED_OUT':
       return { bg: colors.successSoft, fg: colors.success, label: '근무 완료' };
     case 'COMPLETED':

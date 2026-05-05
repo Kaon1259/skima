@@ -5,7 +5,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { api } from '@/lib/api';
 import { WithholdingReceipt, fmtDateTime, fmtKRW } from '@/lib/types';
 import { colors, spacing, styles } from '@/lib/theme';
-import { DocSection, Field, Header } from '../contract/[matchId]';
+import { DocSection, Field, Header } from '@/app/contract/[matchId]';
 
 export default function WithholdingScreen() {
   const { matchId } = useLocalSearchParams<{ matchId: string }>();

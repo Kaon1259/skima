@@ -1,11 +1,13 @@
 import { DefaultTheme, ThemeProvider } from '@react-navigation/native';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
+import { useEffect } from 'react';
 import { Platform } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import 'react-native-reanimated';
 
 import { AuthProvider, useAuth } from '@/lib/auth';
+import { hydrateApiBase } from '@/lib/config';
 import { setupPushHandler, usePushRegistration, usePushTapNavigation } from '@/lib/push';
 import { ToastProvider } from '@/lib/toast';
 import { colors } from '@/lib/theme';
@@ -38,6 +40,11 @@ function PushBridge() {
 }
 
 export default function RootLayout() {
+  // 저장된 API base 선택값 (local/railway) 을 메모리로 끌어옴 — 첫 API 호출 전에 완료
+  useEffect(() => {
+    hydrateApiBase();
+  }, []);
+
   return (
     <SafeAreaProvider initialMetrics={Platform.OS === 'web' ? initialMetrics : undefined}>
       <AuthProvider>
