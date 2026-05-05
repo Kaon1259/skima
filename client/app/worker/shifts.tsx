@@ -44,6 +44,8 @@ type TimeFilter = 'any' | 'morning' | 'afternoon' | 'evening' | 'night';
 type DayFilter = 'any' | 'today' | 'thisweek' | 'weekend';
 type WageFilter = 'any' | '12k' | '15k';
 type DistanceFilter = 'any' | '5' | '10' | '30';
+/** 매장 카테고리 필터 — 큰 그릇 (CafeType suffix 매칭). 세부는 브랜드명/description 으로 식별 */
+type CategoryFilter = 'any' | 'cafe' | 'bakery' | 'restaurant' | 'bar';
 
 const DISTANCE_LIMIT_KM: Record<DistanceFilter, number | null> = {
   any: null,
@@ -75,6 +77,22 @@ const WAGE_LABEL: Record<WageFilter, string> = {
   '15k': '시급 15k+',
 };
 
+const CATEGORY_LABEL: Record<CategoryFilter, { label: string; emoji: string }> = {
+  any:        { label: '전체',     emoji: '🏷️' },
+  cafe:       { label: '카페',     emoji: '☕' },
+  bakery:     { label: '베이커리', emoji: '🥐' },
+  restaurant: { label: '음식점',   emoji: '🍱' },
+  bar:        { label: '펍·바',    emoji: '🍺' },
+};
+
+/** CafeType 의 suffix 로 카테고리 매칭 (FRANCHISE_CAFE/INDIVIDUAL_CAFE → 'cafe' 등) */
+function cafeTypeMatchesCategory(cafeType: string | undefined, cat: CategoryFilter): boolean {
+  if (cat === 'any') return true;
+  if (!cafeType) return false;
+  const suffix = cat.toUpperCase();
+  return cafeType.endsWith(`_${suffix}`);
+}
+
 export default function WorkerShiftsScreen() {
   const [shifts, setShifts] = useState<WorkerShift[]>([]);
   const [me, setMe] = useState<MyProfile | null>(null);
@@ -89,6 +107,7 @@ export default function WorkerShiftsScreen() {
   const [dayFilter, setDayFilter] = useState<DayFilter>('any');
   const [wageFilter, setWageFilter] = useState<WageFilter>('any');
   const [distanceFilter, setDistanceFilter] = useState<DistanceFilter>('any');
+  const [categoryFilter, setCategoryFilter] = useState<CategoryFilter>('any');
   const [sortMode, setSortMode] = useState<SortMode>('recommend');
   const [filtersLoaded, setFiltersLoaded] = useState(false);
   const [filtersExpanded, setFiltersExpanded] = useState(false);
@@ -220,6 +239,7 @@ export default function WorkerShiftsScreen() {
     // 임시 필터 (화면 칩)
     if (fitOnly) xs = xs.filter(isFitForMe);
     if (favOnly) xs = xs.filter((s) => favIds.has(s.cafeId));
+    if (categoryFilter !== 'any') xs = xs.filter((s) => cafeTypeMatchesCategory(s.cafeType, categoryFilter));
     if (wageFilter === '12k') xs = xs.filter((s) => s.hourlyWage >= 12000);
     if (wageFilter === '15k') xs = xs.filter((s) => s.hourlyWage >= 15000);
     if (timeFilter !== 'any') {
@@ -286,11 +306,11 @@ export default function WorkerShiftsScreen() {
       xs.sort((a, b) => (a.startAt ?? '').localeCompare(b.startAt ?? ''));
     }
     return xs;
-  }, [shifts, fitOnly, favOnly, favIds, wageFilter, timeFilter, dayFilter, distanceFilter, sortMode, isFitForMe, prefs, myCoords]);
+  }, [shifts, fitOnly, favOnly, favIds, wageFilter, timeFilter, dayFilter, distanceFilter, categoryFilter, sortMode, isFitForMe, prefs, myCoords]);
 
   const activeFilterCount = (fitOnly ? 1 : 0) + (favOnly ? 1 : 0)
     + (timeFilter !== 'any' ? 1 : 0) + (dayFilter !== 'any' ? 1 : 0) + (wageFilter !== 'any' ? 1 : 0)
-    + (distanceFilter !== 'any' ? 1 : 0);
+    + (distanceFilter !== 'any' ? 1 : 0) + (categoryFilter !== 'any' ? 1 : 0);
 
   function resetFilters() {
     setFitOnly(false);
@@ -299,6 +319,7 @@ export default function WorkerShiftsScreen() {
     setDayFilter('any');
     setWageFilter('any');
     setDistanceFilter('any');
+    setCategoryFilter('any');
   }
 
   const profileIncomplete = !!me
@@ -346,6 +367,7 @@ export default function WorkerShiftsScreen() {
           if (typeof v.dayFilter === 'string') setDayFilter(v.dayFilter as DayFilter);
           if (typeof v.wageFilter === 'string') setWageFilter(v.wageFilter as WageFilter);
           if (typeof v.distanceFilter === 'string') setDistanceFilter(v.distanceFilter as DistanceFilter);
+          if (typeof v.categoryFilter === 'string') setCategoryFilter(v.categoryFilter as CategoryFilter);
           if (typeof v.sortMode === 'string') setSortMode(v.sortMode as SortMode);
         } catch { /* ignore */ }
       }
@@ -356,9 +378,9 @@ export default function WorkerShiftsScreen() {
   useEffect(() => {
     if (!filtersLoaded) return;
     storage.set(FILTER_STORAGE_KEY, JSON.stringify({
-      fitOnly, favOnly, timeFilter, dayFilter, wageFilter, distanceFilter, sortMode,
+      fitOnly, favOnly, timeFilter, dayFilter, wageFilter, distanceFilter, categoryFilter, sortMode,
     }));
-  }, [fitOnly, favOnly, timeFilter, dayFilter, wageFilter, distanceFilter, sortMode, filtersLoaded]);
+  }, [fitOnly, favOnly, timeFilter, dayFilter, wageFilter, distanceFilter, categoryFilter, sortMode, filtersLoaded]);
 
   async function apply(shiftId: number) {
     setBusyId(shiftId);
@@ -607,6 +629,27 @@ export default function WorkerShiftsScreen() {
                   })}
                 </ScrollView>
               ) : null}
+
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={{ gap: 6, paddingRight: spacing.lg }}
+                style={{ marginTop: 6 }}
+              >
+                {(['any', 'cafe', 'bakery', 'restaurant', 'bar'] as CategoryFilter[]).map((c) => {
+                  const active = categoryFilter === c;
+                  const meta = CATEGORY_LABEL[c];
+                  return (
+                    <FilterChip
+                      key={c}
+                      label={`${meta.emoji} ${meta.label}`}
+                      active={active}
+                      onPress={() => setCategoryFilter(c)}
+                      accent={colors.primary}
+                    />
+                  );
+                })}
+              </ScrollView>
 
               <ScrollView
                 horizontal
