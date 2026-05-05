@@ -259,6 +259,19 @@ public class NotificationService {
                         m.getMatchedAt(),
                         "success"));
             }
+            // 2-1) 매칭 확정됐는데 워커가 아직 근로계약서 ack 안 함 — 출근 전 필수 단계 (대칭 동선)
+            if (m.getStatus() == MatchStatus.MATCHED
+                    && m.getWorkerAcknowledgedContractAt() == null
+                    && m.getMatchedAt() != null && m.getMatchedAt().isAfter(weekAgo)) {
+                raws.add(new Raw(
+                        "CONTRACT_ACK_REQUIRED",
+                        s.getCafe().getName() + " · 근로계약서 확인 필요",
+                        "출근 전 필수 단계 — " + fmtTime(s.getStartAt()) + " 시작",
+                        "/contract/" + m.getId() + "?focus=ack",
+                        m.getId(),
+                        m.getMatchedAt(),
+                        "warn"));
+            }
             if (m.getStatus() == MatchStatus.NO_SHOW
                     && m.getMatchedAt() != null && m.getMatchedAt().isAfter(weekAgo)) {
                 raws.add(new Raw(

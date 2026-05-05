@@ -4,6 +4,55 @@
 
 ---
 
+## 2026-05-05 (11차) — 매칭 확정 시 워커 알림 "근로계약서 확인 요청" (대칭 동선 완성)
+
+### 동기 (사용자 합의)
+- 10차에서 "워커 ack → 점주 알림" (`WORKER_CONTRACT_ACK`) 만 만들어 한쪽만 비대칭이었음
+- 워커는 매칭 카드 자체 배너로만 ack 필요성 인지 → 알림함에서 명시적 알림으로 보강 (대칭 완성)
+
+### 변경 내용
+
+#### 1. 백엔드 — `NotificationService.forWorker` 새 type 추가
+- `CONTRACT_ACK_REQUIRED`
+- 조건: `match.status == MATCHED && workerAck == null && matchedAt > weekAgo`
+- 라우트: `/contract/{matchId}?focus=ack` (워커 routing 으로 직행 → 강조 모드 자동 진입)
+- 제목: "{매장명} · 근로계약서 확인 필요"
+- 부제: "출근 전 필수 단계 — {시작시각} 시작"
+- severity: `warn` (필수 동작)
+- NEW_MATCH 와 공존 — NEW_MATCH 는 매칭 사실 알림(/worker/matches), CONTRACT_ACK_REQUIRED 는 ack 필요 알림(/contract/...)
+
+#### 2. 클라 동기화
+- `lib/types.ts NotificationItem.type` 에 `'CONTRACT_ACK_REQUIRED'` 추가
+- `components/NotificationBell.tsx TYPE_ICON` 에 `'document-text'` 매핑 (점주측 `WORKER_CONTRACT_ACK` 와 동일 아이콘)
+
+### 양측 ack 동선 완성도 (11차 후)
+
+**워커 측 — 진입 4가지 (대칭 완성):**
+- 자발적 1: `worker/matches.tsx` 매칭 카드 → "📄 근로계약서 확인 필요" 배너
+- 자발적 2 (NEW): 워커 알림함 → "{매장} · 근로계약서 확인 필요" → 클릭 → 계약서 화면 강조 모드
+- 강제: 출근 체크인 클릭 → ack 없으면 alert + 자동 라우팅
+- 자동 토스트: 알림 도착 시 토스트 노출 (NotificationBell 기존 로직)
+
+**점주 측 — 진입 4가지 (10차 정착):**
+- 자발적 1: 메인 시프트 카드 → ack 배너
+- 자발적 2: 시프트 상세 hero → ack 배너
+- 자발적 3: 점주 알림함 → "{워커} 워커가 근로계약서 확인" → 클릭
+- 강제: 정산 승인 + 평가 → ack 없으면 alert + 자동 라우팅
+
+### 검증
+- `tsc --noEmit` exit 0
+- 백엔드 재시작 후 시나리오:
+  1. owner1 매칭 확정 → worker1 알림함에 "{매장} · 근로계약서 확인 필요" 도착
+  2. 클릭 → /contract/{matchId}?focus=ack → 자동 스크롤 + warn 강조 모드
+  3. ack 등록 후 매칭으로 복귀 → 알림 자동 사라짐 (workerAck != null 이라 조건 미충족)
+
+### 잔여
+- AWS IAM 키 폐기 (P0 — 사용자 보류)
+- 카카오 redirect URI 등록 (P1)
+- 다음 라운드 후보: 매장 사진 시프트 카드 썸네일 / 점주 분쟁 신고 UI / 카카오 native 로그인
+
+---
+
 ## 2026-05-04 (10차) — 점주 정산 강제 게이트 + 워커 ack 알림 + 계좌 등록
 
 ### 동기 (사용자 요청)
