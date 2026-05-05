@@ -4,6 +4,42 @@
 
 ---
 
+## 2026-05-05 (12차) — 매장 사진 워커 시프트 카드 썸네일
+
+### 동기 (사용자 합의)
+- 11차까지 기능/동선 강화 위주 — 워커 첫인상은 텍스트만이라 시각적 hook 부족
+- 매장 사진 도메인은 이미 있음 (`Cafe.imageUrl` MEDIUMTEXT, S3 업로드 가능)
+- 시프트 카드는 워커가 가장 먼저 보는 화면 → ROI 높음
+
+### 변경 내용
+
+#### 1. 백엔드 — `WorkerShiftView` DTO 에 `cafeImageUrl` 추가
+- `WorkerShiftView.from()` 안에서 `s.getCafe().getImageUrl()` 자동 채움 (Controller callsite 시그너처 변경 없음)
+
+#### 2. 백엔드 — DataSeeder 데모 사진 2개
+- cafe1 (메가 강남) / cafe3 (컴포즈 홍대) — Unsplash 카페 사진 URL 시드 (240x240)
+- cafe2 (메가 역삼) / cafe4 (파리바게뜨 신촌) — null (letter 폴백 검증용)
+- @Transactional 안의 setImageUrl → dirty checking 으로 flush
+
+#### 3. 클라 — `WorkerShift.cafeImageUrl` 추가 (types.ts)
+
+#### 4. 클라 — `worker/shifts.tsx` 카드 헤더 분기
+- `cafeImageUrl` 있음 → `Image` (40x40, surfaceAlt 폴백 bg)
+- 없음 → 기존 brandColor + brandLetter 아바타 (변경 없음)
+- `react-native` 에서 `Image` import 추가
+
+### 검증
+- `tsc --noEmit` exit 0
+- API: `GET /api/worker/shifts` 응답에 `cafeImageUrl` 필드 노출
+- 시각: cafe1·3 카드 = 사진 / cafe2·4 카드 = letter (A/B 비교 가능)
+
+### 다음 라운드 후보
+- (C) 점주 분쟁 신고 UI + 자동 판정 cron
+- (D) 워커 시프트 카드 추천 점수 노출
+- (E) 카카오 native 로그인
+
+---
+
 ## 2026-05-05 (11차) — 매칭 확정 시 워커 알림 "근로계약서 확인 요청" (대칭 동선 완성)
 
 ### 동기 (사용자 합의)

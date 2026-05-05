@@ -68,6 +68,7 @@ export type WorkerShift = Omit<Shift, 'matchedAt' | 'matchingMinutes'> & {
   cafeLatitude?: number | null;
   cafeLongitude?: number | null;
   cafeTrustScore?: number | null;
+  cafeImageUrl?: string | null;
 };
 
 export type WorkerTier = 'NEW' | 'REGULAR' | 'VERIFIED' | 'ELITE';

@@ -102,6 +102,7 @@ public class DataSeeder implements CommandLineRunner {
                 .owner(owner1).name("메가MGC커피 강남역점").address("서울 강남구 강남대로 123")
                 .cafeType(CafeType.FRANCHISE_CAFE).brandKey("mega")
                 .latitude(37.4979).longitude(127.0276).build());
+        cafe1.setImageUrl("https://images.unsplash.com/photo-1554118811-1e0d58224f24?auto=format&fit=crop&w=240&h=240&q=70");
         Cafe cafe2 = cafeRepository.save(Cafe.builder()
                 .owner(owner1).name("메가MGC커피 역삼점").address("서울 강남구 역삼로 45")
                 .cafeType(CafeType.FRANCHISE_CAFE).brandKey("mega")
@@ -110,6 +111,7 @@ public class DataSeeder implements CommandLineRunner {
                 .owner(owner2).name("컴포즈커피 홍대점").address("서울 마포구 홍익로 78")
                 .cafeType(CafeType.FRANCHISE_CAFE).brandKey("compose")
                 .latitude(37.5547).longitude(126.9237).build());
+        cafe3.setImageUrl("https://images.unsplash.com/photo-1453614512568-c4024d13c247?auto=format&fit=crop&w=240&h=240&q=70");
         Cafe cafe4 = cafeRepository.save(Cafe.builder()
                 .owner(owner3).name("파리바게뜨 신촌점").address("서울 서대문구 연세로 90")
                 .cafeType(CafeType.FRANCHISE_BAKERY).brandKey("parisbaguette")

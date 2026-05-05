@@ -43,7 +43,9 @@ public record WorkerShiftView(
         Double cafeLatitude,
         Double cafeLongitude,
         // 매장 신뢰도 점수 (null = 데이터 부족, 5건 미만)
-        Integer cafeTrustScore
+        Integer cafeTrustScore,
+        // 매장 사진 URL — 카드 헤더 썸네일. null 이면 브랜드 letter 폴백
+        String cafeImageUrl
 ) {
     public static WorkerShiftView from(Shift s, ApplicationStatus myStatus, BrandResponse brand,
                                        Double cafeAvgRating, Integer cafeRatingsCount, Double cafeNoShowRate,
@@ -75,7 +77,8 @@ public record WorkerShiftView(
                 isFavoriteCafe,
                 s.getCafe().getLatitude(),
                 s.getCafe().getLongitude(),
-                cafeTrustScore
+                cafeTrustScore,
+                s.getCafe().getImageUrl()
         );
     }
 }

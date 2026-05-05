@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Alert, FlatList, Platform, Pressable, RefreshControl, ScrollView, Text, View } from 'react-native';
+import { Alert, FlatList, Image, Platform, Pressable, RefreshControl, ScrollView, Text, View } from 'react-native';
 import { router } from 'expo-router';
 import { GradientButton } from '@/components/Gradient';
 import { Icon } from '@/components/Icon';
@@ -766,22 +766,29 @@ export default function WorkerShiftsScreen() {
               },
             ]}
           >
-            {/* 헤더: 아바타 + 매장 정보 + 상태 */}
+            {/* 헤더: 매장 사진(또는 letter 폴백) + 매장 정보 + 상태 */}
             <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 10 }}>
-              <View
-                style={{
-                  width: 40,
-                  height: 40,
-                  borderRadius: 10,
-                  backgroundColor: item.brandColor ?? colors.primary,
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                }}
-              >
-                <Text style={{ color: '#fff', fontWeight: '900', fontSize: 15 }}>
-                  {item.brandLetter ?? '☕'}
-                </Text>
-              </View>
+              {item.cafeImageUrl ? (
+                <Image
+                  source={{ uri: item.cafeImageUrl }}
+                  style={{ width: 40, height: 40, borderRadius: 10, backgroundColor: colors.surfaceAlt }}
+                />
+              ) : (
+                <View
+                  style={{
+                    width: 40,
+                    height: 40,
+                    borderRadius: 10,
+                    backgroundColor: item.brandColor ?? colors.primary,
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                >
+                  <Text style={{ color: '#fff', fontWeight: '900', fontSize: 15 }}>
+                    {item.brandLetter ?? '☕'}
+                  </Text>
+                </View>
+              )}
               <Pressable
                 style={({ pressed }) => [{ flex: 1, marginRight: 6 }, pressed && { opacity: 0.7 }]}
                 onPress={() => router.push(`/cafe/${item.cafeId}` as never)}
