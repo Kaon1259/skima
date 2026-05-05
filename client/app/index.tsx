@@ -1,7 +1,8 @@
 import { useEffect, useRef } from 'react';
-import { Animated, Easing, Image, Text, View } from 'react-native';
+import { Animated, Easing, Text, View } from 'react-native';
 import { router } from 'expo-router';
 
+import { BrandHero } from '@/components/BrandHero';
 import { useAuth } from '@/lib/auth';
 import { colors } from '@/lib/theme';
 
@@ -38,26 +39,16 @@ export default function IndexSplash() {
     <View
       style={{
         flex: 1,
-        backgroundColor: '#FFF7ED',
+        backgroundColor: colors.primary50,
         alignItems: 'center',
         justifyContent: 'center',
       }}
     >
-      <Animated.View style={{ opacity: fade, transform: [{ scale }], alignItems: 'center' }}>
-        <Image
-          source={require('@/assets/images/icon.png')}
-          style={{
-            width: 180,
-            height: 180,
-            borderRadius: 40,
-            marginBottom: 24,
-          }}
-          resizeMode="cover"
-        />
-        <Text style={{ fontSize: 16, color: colors.textMuted, fontWeight: '700' }}>
-          1시간 매칭 · 30분 입금
-        </Text>
-      </Animated.View>
+      <BrandHero
+        size="xl"
+        tagline="1시간 매칭 · 30분 입금"
+        animatedTile={{ opacity: fade, scale }}
+      />
 
       <Text
         style={{

@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import {
   Alert,
-  Image,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -15,6 +14,7 @@ import { router } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
 import * as Linking from 'expo-linking';
 
+import { BrandHero } from '@/components/BrandHero';
 import { useAuth } from '@/lib/auth';
 import { ApiError } from '@/lib/api';
 import {
@@ -104,20 +104,8 @@ export default function LoginScreen() {
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
-        <View style={{ marginBottom: 24, alignItems: 'flex-start' }}>
-          <Image
-            source={require('@/assets/images/icon.png')}
-            style={{
-              width: 88,
-              height: 88,
-              borderRadius: 22,
-              marginBottom: 16,
-            }}
-            resizeMode="cover"
-          />
-          <Text style={[styles.subtitle, { marginTop: 4, fontSize: 14 }]}>
-            1시간 매칭 · 30분 입금
-          </Text>
+        <View style={{ marginBottom: 28 }}>
+          <BrandHero size="md" align="start" tagline="1시간 매칭 · 30분 입금" />
         </View>
 
         {/* API 서버 선택 토글 — 로컬 vs Railway */}
