@@ -4,6 +4,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 
 import { Avatar } from '@/components/Avatar';
 import { ChatSheet } from '@/components/ChatSheet';
+import { DisputeModal } from '@/components/DisputeModal';
 import { GradientButton } from '@/components/Gradient';
 import { HealthCertBadge } from '@/components/HealthCertBadge';
 import { TrustScoreBadge } from '@/components/TrustScoreBadge';
@@ -38,6 +39,7 @@ export default function ShiftApplicantsScreen() {
   const [postRateTarget, setPostRateTarget] = useState<{ matchId: number; workerName: string } | null>(null);
   const [busyNoShow, setBusyNoShow] = useState(false);
   const [noShowResult, setNoShowResult] = useState<NoShowResult | null>(null);
+  const [disputeTarget, setDisputeTarget] = useState<{ matchId: number; workerName: string } | null>(null);
   const openChat = (matchId: number, cafeName: string) => {
     blurFocusedForModal();
     setChatTarget({ matchId, cafeName });
@@ -208,6 +210,10 @@ export default function ShiftApplicantsScreen() {
                 setPostRateTarget({ matchId, workerName });
               }}
               onReportNoShow={reportNoShow}
+              onReportDispute={(matchId, workerName) => {
+                blurFocusedForModal();
+                setDisputeTarget({ matchId, workerName });
+              }}
               busyNoShow={busyNoShow}
             />
           ) : null}
@@ -361,6 +367,14 @@ export default function ShiftApplicantsScreen() {
       result={noShowResult}
       onClose={() => setNoShowResult(null)}
     />
+    <DisputeModal
+      visible={disputeTarget != null}
+      matchId={disputeTarget?.matchId ?? null}
+      role="OWNER"
+      workerName={disputeTarget?.workerName}
+      onClose={() => setDisputeTarget(null)}
+      onSubmitted={() => { setDisputeTarget(null); load(); }}
+    />
     </>
   );
 }
@@ -380,6 +394,7 @@ function ShiftTimeline({
   onApprovePayout,
   onRatePostAutoApproval,
   onReportNoShow,
+  onReportDispute,
   busyNoShow,
 }: {
   shift: OwnerShift;
@@ -387,6 +402,7 @@ function ShiftTimeline({
   onApprovePayout: (matchId: number, workerName: string) => void;
   onRatePostAutoApproval: (matchId: number, workerName: string) => void;
   onReportNoShow: (matchId: number, workerName: string) => void;
+  onReportDispute: (matchId: number, workerName: string) => void;
   busyNoShow: boolean;
 }) {
   const v = statusVisual(shift.status);
@@ -645,6 +661,28 @@ function ShiftTimeline({
             <Text style={{ fontSize: 12, fontWeight: '700', color: colors.text }}>원천징수영수증</Text>
           </Pressable>
         </View>
+      ) : null}
+
+      {/* 이의 제기 — 매칭 종료(CHECKED_OUT/NO_SHOW) 시 24h 이내 가능 */}
+      {shift.matchId && shift.matchedWorkerName
+        && (shift.matchStatus === 'CHECKED_OUT' || shift.matchStatus === 'NO_SHOW') ? (
+        <Pressable
+          onPress={() => onReportDispute(shift.matchId!, shift.matchedWorkerName!)}
+          style={({ pressed }) => [
+            {
+              marginTop: 8, paddingVertical: 8,
+              flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
+              borderRadius: radius.md, borderWidth: 1, borderColor: colors.border,
+              backgroundColor: colors.surface,
+            },
+            pressed && { opacity: 0.7 },
+          ]}
+        >
+          <Text style={{ fontSize: 12 }}>⚠️</Text>
+          <Text style={{ fontSize: 11, fontWeight: '700', color: colors.textMuted }}>
+            이의 제기 (24h 내)
+          </Text>
+        </Pressable>
       ) : null}
     </View>
   );

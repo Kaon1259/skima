@@ -44,6 +44,7 @@ export default function OwnerCafesScreen() {
   const [modalOpen, setModalOpen] = useState(false);
   const [mode, setMode] = useState<Mode>('create');
   const [editId, setEditId] = useState<number | null>(null);
+  const editingCafe = editId != null ? cafes.find((c) => c.id === editId) ?? null : null;
   const [autoTriggered, setAutoTriggered] = useState(false);
   const [onboardingMode, setOnboardingMode] = useState(false);
 
@@ -367,12 +368,12 @@ export default function OwnerCafesScreen() {
                   { flex: 1, flexDirection: 'row', gap: 6 },
                   busyImageCafeId === item.id && { opacity: 0.6 },
                 ]}
-                onPress={() => item.imageUrl ? handleDeleteCafeImage(item) : handleUploadCafeImage(item)}
+                onPress={() => handleUploadCafeImage(item)}
                 disabled={busyImageCafeId === item.id}
               >
-                <Text style={{ fontSize: 14 }}>{item.imageUrl ? '🗑️' : '📸'}</Text>
+                <Text style={{ fontSize: 14 }}>{item.imageUrl ? '🖼️' : '📸'}</Text>
                 <Text style={styles.buttonSecondaryText}>
-                  {busyImageCafeId === item.id ? '...' : item.imageUrl ? '사진 삭제' : '사진 추가'}
+                  {busyImageCafeId === item.id ? '...' : item.imageUrl ? '사진 변경' : '사진 추가'}
                 </Text>
               </Pressable>
               <Pressable
@@ -467,6 +468,19 @@ export default function OwnerCafesScreen() {
               description={description}
               setDescription={setDescription}
               busy={busy}
+              hasImage={!!editingCafe?.imageUrl}
+              onRemoveImage={editingCafe ? async () => {
+                const proceed = Platform.OS === 'web'
+                  ? window.confirm('매장 사진을 제거할까요?')
+                  : await new Promise<boolean>((resolve) => {
+                      Alert.alert('사진 제거', '매장 사진을 제거할까요?', [
+                        { text: '취소', style: 'cancel', onPress: () => resolve(false) },
+                        { text: '제거', style: 'destructive', onPress: () => resolve(true) },
+                      ]);
+                    });
+                if (!proceed) return;
+                await handleDeleteCafeImage(editingCafe);
+              } : undefined}
               onCancel={() => {
                 setModalOpen(false);
                 setOnboardingMode(false);
@@ -587,6 +601,8 @@ function RegisterForm({
   description,
   setDescription,
   busy,
+  hasImage,
+  onRemoveImage,
   onCancel,
   onSubmit,
 }: {
@@ -612,6 +628,8 @@ function RegisterForm({
   description: string;
   setDescription: (s: string) => void;
   busy: boolean;
+  hasImage?: boolean;
+  onRemoveImage?: () => void;
   onCancel: () => void;
   onSubmit: () => void;
 }) {
@@ -1016,6 +1034,21 @@ function RegisterForm({
         placeholderTextColor={colors.textLight}
         multiline
       />
+
+      {/* 사진 제거 — 편집 모드 + 사진 있는 매장만. 변경은 카드의 "사진 변경" 버튼으로 */}
+      {mode === 'edit' && hasImage && onRemoveImage ? (
+        <Pressable
+          onPress={onRemoveImage}
+          style={({ pressed }) => [
+            { marginTop: 14, paddingVertical: 10, alignItems: 'center' },
+            pressed && { opacity: 0.6 },
+          ]}
+        >
+          <Text style={{ fontSize: 12, color: colors.danger, fontWeight: '600' }}>
+            🗑️ 매장 사진 제거
+          </Text>
+        </Pressable>
+      ) : null}
 
       <View style={{ flexDirection: 'row', gap: 8, marginTop: 16 }}>
         <Pressable

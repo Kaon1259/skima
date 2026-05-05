@@ -4,6 +4,46 @@
 
 ---
 
+## 2026-05-05 (13차) — 점주 분쟁 신고 UI + 자동 판정 cron + 매장 사진 변경 UX 픽스
+
+### 동기 (사용자 요청)
+1. (C) 분쟁: 워커는 신고 가능 / 점주는 미가능 — 양측 대칭 비대칭 해소
+2. (사용자 발견 — B 검증 중) 점주 매장 카드의 사진 버튼이 "추가/삭제" 토글이라 변경 동선이 없음. 사진 바꾸려면 삭제 → 재업로드 2번 필요. 즉시 삭제는 confirm 없이 위험
+
+### 1. 분쟁 — DisputeScheduler 신설
+- `DisputeScheduler.java` (scheduler 패키지)
+  - 매시간 5분에 PENDING 분쟁 자동 판정 (cron `0 5 * * * *`)
+  - 생성 후 60분 경과한 것만 처리 — 양측 진술/관리자 개입 여유
+  - `DisputeService.autoResolve()` 재사용 (NO_SHOW_DISPUTE / LATE_CHECKIN / EARLY_CHECKOUT 휴리스틱)
+- 도메인/Controller/Service/Repository는 9~K 라운드에 이미 구축된 상태였음 — 스케줄러만 누락이었음
+
+### 2. 분쟁 — 점주 UI 통합 (`owner/shift/[id].tsx`)
+- `DisputeModal` 신규 import + `disputeTarget` state
+- `ShiftTimeline` 에 `onReportDispute` prop 추가 — 부모에서 setDisputeTarget 호출
+- "이의 제기 (24h 내)" 버튼: matchStatus = `CHECKED_OUT` 또는 `NO_SHOW` 일 때 노출
+- DisputeModal mount: role="OWNER" 로 호출 — DISPUTE_REASON_LABEL.allowedRoles 가 자동 필터 (LATE_CHECKIN / EARLY_CHECKOUT / RUDE_BEHAVIOR / OTHER)
+
+### 3. 매장 사진 UX 픽스 (`owner/cafes.tsx`)
+- 카드 인라인 버튼: 삭제 → **변경(덮어쓰기)** 으로 통합
+  - 사진 없음: `📸 사진 추가`
+  - 사진 있음: `🖼️ 사진 변경` (= `pickAndUploadImage` 동일 호출, 백엔드가 기존 S3 객체 자동 삭제 후 새 업로드)
+- 사진 단독 제거는 → 매장 편집 모달 안에 작은 "🗑️ 매장 사진 제거" 링크 (confirm 다이얼로그 + danger 톤). 실수 방지.
+- 한 번 탭으로 사진 사라지던 위험 동선 제거
+
+### 검증
+- `tsc --noEmit` exit 0
+- 백엔드 재기동: DisputeScheduler bean 등록 확인
+- API: 분쟁 생성/자동판정은 9~K 라운드에서 이미 동작 검증됨
+- 사진 UX: 카드 라벨 변경 + 편집 모달 제거 링크 (시각적 회귀만)
+
+### 다음 라운드 후보
+- (D) 워커 시프트 카드 추천 점수 노출 — 투명성
+- (E) 카카오 native 로그인
+- 점주 분쟁 신고 본인 화면 (`/owner/disputes` — 신고 내역 + 판정 결과 조회)
+- 알림 type 추가: `DISPUTE_RESOLVED` (자동 판정 결과 양측에 알림)
+
+---
+
 ## 2026-05-05 (12차) — 매장 사진 워커 시프트 카드 썸네일
 
 ### 동기 (사용자 합의)
