@@ -100,12 +100,13 @@ export default function LoginScreen() {
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
       <ScrollView
-        contentContainerStyle={{ padding: spacing.xl, paddingTop: 80, paddingBottom: 60 }}
+        contentContainerStyle={{ padding: spacing.xl, paddingTop: 64, paddingBottom: 60 }}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
-        <View style={{ marginBottom: 28 }}>
-          <BrandHero size="md" align="start" tagline="1시간 매칭 · 30분 입금" />
+        {/* 브랜드 hero — 중앙 정렬, 폼 위에서 시각적 무게 잡아줌 */}
+        <View style={{ alignItems: 'center', marginBottom: 36 }}>
+          <BrandHero size="lg" align="center" tagline="1시간 매칭 · 30분 입금" />
         </View>
 
         {/* API 서버 선택 토글 — 로컬 vs Railway */}
