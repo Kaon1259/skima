@@ -117,15 +117,19 @@ public class DataSeeder implements CommandLineRunner {
                 .cafeType(CafeType.FRANCHISE_BAKERY).brandKey("parisbaguette")
                 .latitude(37.5573).longitude(126.9389).build());
 
-        // Phase 2 — 펍/이자카야 데모 매장 (저녁 피크 + 시급↑)
+        // Phase 2 — 바 (펍·이자카야 통합) + 음식점 데모 매장
         Cafe cafe5 = cafeRepository.save(Cafe.builder()
                 .owner(owner2).name("WaBar 홍대점").address("서울 마포구 양화로 162")
-                .cafeType(CafeType.FRANCHISE_PUB).brandKey("wabar")
+                .cafeType(CafeType.FRANCHISE_BAR).brandKey("wabar")
                 .latitude(37.5563).longitude(126.9249).build());
         Cafe cafe6 = cafeRepository.save(Cafe.builder()
                 .owner(owner3).name("모루이자카야 신촌점").address("서울 서대문구 연세로 12")
-                .cafeType(CafeType.IZAKAYA).brandKey("moru")
+                .cafeType(CafeType.FRANCHISE_BAR).brandKey("moru")
                 .latitude(37.5582).longitude(126.9402).build());
+        Cafe cafe7 = cafeRepository.save(Cafe.builder()
+                .owner(owner1).name("BBQ 강남역점").address("서울 강남구 강남대로 207")
+                .cafeType(CafeType.FRANCHISE_RESTAURANT).brandKey("bbq")
+                .latitude(37.4998).longitude(127.0285).build());
 
         if (!props.getSeed().isCreateShiftsAndApps()) {
             log.info("[SEED] done — users + cafes only (skima.seed.create-shifts-and-apps=false)");

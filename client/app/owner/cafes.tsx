@@ -33,11 +33,11 @@ const TYPE_OPTIONS: { key: CafeType; label: string; emoji: string }[] = [
   { key: 'INDIVIDUAL_CAFE', label: '개인 카페', emoji: '🏠' },
   { key: 'FRANCHISE_BAKERY', label: '프렌차이즈 베이커리', emoji: '🥐' },
   { key: 'INDIVIDUAL_BAKERY', label: '개인 베이커리', emoji: '🥖' },
-  // Phase 2 — 펍·이자카야·와인바
-  { key: 'FRANCHISE_PUB', label: '프렌차이즈 펍', emoji: '🍺' },
-  { key: 'INDIVIDUAL_PUB', label: '개인 펍', emoji: '🍻' },
-  { key: 'IZAKAYA', label: '이자카야', emoji: '🏮' },
-  { key: 'WINE_BAR', label: '와인바', emoji: '🍷' },
+  // Phase 2 — 음식점·바 (세부 카테고리는 브랜드명/description 으로)
+  { key: 'FRANCHISE_RESTAURANT', label: '프렌차이즈 음식점', emoji: '🍱' },
+  { key: 'INDIVIDUAL_RESTAURANT', label: '개인 음식점', emoji: '🍲' },
+  { key: 'FRANCHISE_BAR', label: '프렌차이즈 펍·바', emoji: '🍺' },
+  { key: 'INDIVIDUAL_BAR', label: '개인 펍·바', emoji: '🍻' },
 ];
 
 export default function OwnerCafesScreen() {
@@ -176,7 +176,7 @@ export default function OwnerCafesScreen() {
       notify('매장 종류를 선택해주세요');
       return;
     }
-    const isFranchise = cafeType === 'FRANCHISE_CAFE' || cafeType === 'FRANCHISE_BAKERY' || cafeType === 'FRANCHISE_PUB';
+    const isFranchise = cafeType?.startsWith('FRANCHISE_') ?? false;
     if (isFranchise && !brand) {
       notify('프렌차이즈는 브랜드를 선택해야 합니다');
       return;
@@ -653,7 +653,7 @@ function RegisterForm({
       setBusyLoc(false);
     }
   };
-  const isFranchise = cafeType === 'FRANCHISE_CAFE' || cafeType === 'FRANCHISE_BAKERY' || cafeType === 'FRANCHISE_PUB';
+  const isFranchise = cafeType?.startsWith('FRANCHISE_') ?? false;
   const [pickerOpen, setPickerOpen] = useState(false);
   const [kakaoOpen, setKakaoOpen] = useState(false);
 

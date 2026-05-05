@@ -1,19 +1,19 @@
 export type CafeType =
   | 'FRANCHISE_CAFE' | 'INDIVIDUAL_CAFE'
   | 'FRANCHISE_BAKERY' | 'INDIVIDUAL_BAKERY'
-  // Phase 2 — 펍·이자카야·와인바
-  | 'FRANCHISE_PUB' | 'INDIVIDUAL_PUB'
-  | 'IZAKAYA' | 'WINE_BAR';
+  // Phase 2 — 음식점·바 통합 (세부 카테고리는 브랜드명/description 으로 표현)
+  | 'FRANCHISE_RESTAURANT' | 'INDIVIDUAL_RESTAURANT'
+  | 'FRANCHISE_BAR' | 'INDIVIDUAL_BAR';
 
 export const CAFE_TYPE_LABEL: Record<CafeType, string> = {
   FRANCHISE_CAFE: '프렌차이즈 카페',
   INDIVIDUAL_CAFE: '개인 카페',
   FRANCHISE_BAKERY: '프렌차이즈 베이커리',
   INDIVIDUAL_BAKERY: '개인 베이커리',
-  FRANCHISE_PUB: '프렌차이즈 펍',
-  INDIVIDUAL_PUB: '개인 펍',
-  IZAKAYA: '이자카야',
-  WINE_BAR: '와인바',
+  FRANCHISE_RESTAURANT: '프렌차이즈 음식점',
+  INDIVIDUAL_RESTAURANT: '개인 음식점',
+  FRANCHISE_BAR: '프렌차이즈 펍·바',
+  INDIVIDUAL_BAR: '개인 펍·바',
 };
 
 export type Brand = {
