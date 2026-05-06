@@ -81,12 +81,33 @@ export default function WorkerMatchesScreen() {
   async function checkIn(matchId: number) {
     setBusyId(matchId);
     try {
-      // GPS 좌표 — 가능하면 함께 보내 매장 반경 100m 게이트 검증
+      // GPS 좌표 — 가능하면 함께 보내 매장 반경 100m 게이트 검증.
+      // 권한 거부 / 위치 미지원 시 안내 후 좌표 없이 진행 (매장에 좌표 있으면 백엔드 게이트 적용 안 됨).
       let coords: { latitude: number; longitude: number } | null = null;
+      let geoErr: string | null = null;
       try {
         coords = await getCurrentCoords();
-      } catch {
-        // 권한 거부 / 위치 못 받음 — 좌표 없이 진행 (매장에 좌표 있으면 백엔드에서 게이트 적용 안 됨)
+      } catch (ge) {
+        geoErr = (ge as Error).message || '위치를 가져오지 못했어요';
+      }
+      if (geoErr) {
+        // 사용자가 명시적으로 인지할 수 있게 한 번 안내 — 백엔드는 좌표 없이도 처리 (매장 좌표 있으면 거리 검증 자동 건너뜀)
+        const proceed = Platform.OS === 'web'
+          ? window.confirm(`📍 위치를 가져올 수 없어요\n${geoErr}\n\n좌표 없이 체크인할까요? (매장이 좌표 등록 매장이면 검증이 비활성화됩니다)`)
+          : await new Promise<boolean>((resolve) => {
+              Alert.alert(
+                '위치를 가져올 수 없어요',
+                `${geoErr}\n\n좌표 없이 체크인할까요? (반경 검증이 비활성화됩니다)`,
+                [
+                  { text: '취소', style: 'cancel', onPress: () => resolve(false) },
+                  { text: '계속', onPress: () => resolve(true) },
+                ],
+              );
+            });
+        if (!proceed) {
+          setBusyId(null);
+          return;
+        }
       }
       await api(`/api/worker/matches/${matchId}/check-in`, {
         method: 'POST',

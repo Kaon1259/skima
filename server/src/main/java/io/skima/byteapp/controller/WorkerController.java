@@ -65,10 +65,17 @@ public class WorkerController {
     private final io.skima.byteapp.repository.WorkerBlockedCafeRepository workerBlockedCafeRepository;
     private final io.skima.byteapp.repository.CafeRepository workerCafeRepository;
 
-    /** OPEN 시프트 목록 — 워커 본인 지원 상태 + 브랜드 정보 + 매장 신뢰도 enrich */
+    /**
+     * OPEN 시프트 목록 — 워커 본인 지원 상태 + 브랜드 정보 + 매장 신뢰도 enrich.
+     * 옵션 정렬: ?sort=distance&lat=37.5&lng=127.0 → Haversine 거리 오름차순 (좌표 없는 매장은 뒤로).
+     * 기본 정렬은 백엔드에서 하지 않고 클라단 추천 점수에 위임.
+     */
     @GetMapping("/shifts")
     @org.springframework.transaction.annotation.Transactional(readOnly = true)
-    public List<WorkerShiftView> openShifts(@AuthenticationPrincipal AuthUser principal) {
+    public List<WorkerShiftView> openShifts(@AuthenticationPrincipal AuthUser principal,
+                                            @RequestParam(required = false) String sort,
+                                            @RequestParam(required = false) Double lat,
+                                            @RequestParam(required = false) Double lng) {
         Long workerId = principal.getDomainUser().getId();
         Map<Long, io.skima.byteapp.domain.ApplicationStatus> statusByShift = new HashMap<>();
         applicationRepository.findAllByWorkerId(workerId).forEach(a ->
@@ -138,7 +145,7 @@ public class WorkerController {
             }
         }
 
-        return openShifts.stream()
+        var views = openShifts.stream()
                 .map(s -> {
                     Long cid = s.getCafe().getId();
                     return WorkerShiftView.from(
@@ -152,6 +159,30 @@ public class WorkerController {
                             trustScoreByCafe.get(cid));
                 })
                 .toList();
+
+        // 거리순 정렬 — lat/lng 동봉되어야만 적용. 좌표 없는 시프트는 뒤로.
+        if ("distance".equalsIgnoreCase(sort) && lat != null && lng != null) {
+            final double lat0 = lat;
+            final double lng0 = lng;
+            return views.stream()
+                    .sorted(java.util.Comparator.comparingDouble(v -> {
+                        if (v.cafeLatitude() == null || v.cafeLongitude() == null) return Double.MAX_VALUE;
+                        return haversineKm(lat0, lng0, v.cafeLatitude(), v.cafeLongitude());
+                    }))
+                    .toList();
+        }
+        return views;
+    }
+
+    /** Haversine 거리 km — 두 좌표 사이 직선거리 (지구 반지름 6371km). */
+    private static double haversineKm(double lat1, double lng1, double lat2, double lng2) {
+        double r = 6371;
+        double dLat = Math.toRadians(lat2 - lat1);
+        double dLng = Math.toRadians(lng2 - lng1);
+        double a = Math.sin(dLat / 2) * Math.sin(dLat / 2)
+                + Math.cos(Math.toRadians(lat1)) * Math.cos(Math.toRadians(lat2))
+                * Math.sin(dLng / 2) * Math.sin(dLng / 2);
+        return 2 * r * Math.asin(Math.sqrt(a));
     }
 
     /** 워커 본인 누적 통계 */

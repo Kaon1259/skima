@@ -83,16 +83,22 @@ public class DataSeeder implements CommandLineRunner {
                 .username("owner5").password(pw).name("신규점주정씨").phone("010-5555-5555")
                 .role(UserRole.OWNER).build());
 
-        // 4 workers — 등급 다양 (테스트용)
+        // 4 workers — 등급 다양 (테스트용). Phase 2: worker4(L4 전문가) 는 BARTENDER/KITCHEN/CLOSING 까지 가능.
         List<User> workers = new ArrayList<>();
         SkillLevel[] levels = { SkillLevel.L2_BASIC, SkillLevel.L3_SKILLED, SkillLevel.L1_TRAINEE, SkillLevel.L4_EXPERT };
         for (int i = 1; i <= 4; i++) {
+            java.util.EnumSet<JobRole> roles = i == 4
+                    ? java.util.EnumSet.of(JobRole.BARISTA, JobRole.HALL, JobRole.CASHIER,
+                            JobRole.BARTENDER, JobRole.KITCHEN, JobRole.CLOSING)
+                    : i == 3
+                    ? java.util.EnumSet.of(JobRole.BARISTA, JobRole.HALL, JobRole.KITCHEN)
+                    : java.util.EnumSet.of(JobRole.BARISTA, JobRole.HALL, JobRole.CASHIER);
             workers.add(userRepository.save(User.builder()
                     .username("worker" + i).password(pw).name("워커" + i)
                     .phone("010-9999-000" + i).role(UserRole.WORKER)
                     .bankAccount("토스 1234-" + i)
                     .selfReportedLevel(levels[i - 1])
-                    .capableRoles(java.util.EnumSet.of(JobRole.BARISTA, JobRole.HALL, JobRole.CASHIER))
+                    .capableRoles(roles)
                     .certifications(i == 1 ? java.util.Set.of("HEALTH_CERT") : java.util.Set.of())
                     .build()));
         }
@@ -139,31 +145,50 @@ public class DataSeeder implements CommandLineRunner {
 
         LocalDateTime now = LocalDateTime.now();
 
-        // 6 OPEN shifts across cafes
-        Shift s1 = saveShift(cafe1, now.plusHours(2), 4, 11_000, "오후 피크 4시간");
-        Shift s2 = saveShift(cafe1, now.plusHours(7), 4, 11_500, "저녁 피크 4시간");
-        Shift s3 = saveShift(cafe2, now.plusHours(3), 5, 11_000, "런치 + 오후");
-        Shift s4 = saveShift(cafe3, now.plusHours(1).plusMinutes(30), 6, 12_000, "홍대 주말 6시간");
-        Shift s5 = saveShift(cafe3, now.plusHours(10), 4, 11_500, "마감 청소 포함");
-        Shift s6 = saveShift(cafe4, now.plusHours(4), 5, 10_500, "신촌 평일 오후");
+        // 6 OPEN shifts across 카페·베이커리 (Phase 1)
+        Shift s1 = saveShift(cafe1, now.plusHours(2), 4, 11_000, "오후 피크 4시간", null, null);
+        Shift s2 = saveShift(cafe1, now.plusHours(7), 4, 11_500, "저녁 피크 4시간", null, null);
+        Shift s3 = saveShift(cafe2, now.plusHours(3), 5, 11_000, "런치 + 오후", null, null);
+        Shift s4 = saveShift(cafe3, now.plusHours(1).plusMinutes(30), 6, 12_000, "홍대 주말 6시간", null, null);
+        Shift s5 = saveShift(cafe3, now.plusHours(10), 4, 11_500, "마감 청소 포함", null, null);
+        Shift s6 = saveShift(cafe4, now.plusHours(4), 5, 10_500, "신촌 평일 오후", null, null);
+
+        // 6 OPEN shifts across 음식점·바 (Phase 2 — 카테고리 필터 검증용)
+        Shift s7 = saveShift(cafe5, now.plusHours(6), 5, 13_000, "WaBar 저녁 5시간 — 칵테일 제조",
+                JobRole.BARTENDER, SkillLevel.L2_BASIC);
+        Shift s8 = saveShift(cafe5, now.plusHours(11), 4, 13_500, "WaBar 마감 4시간 — 청소·정산",
+                JobRole.CLOSING, SkillLevel.L3_SKILLED);
+        Shift s9 = saveShift(cafe6, now.plusHours(7), 5, 12_500, "이자카야 저녁 5시간 — 홀 서빙",
+                JobRole.HALL, SkillLevel.L2_BASIC);
+        Shift s10 = saveShift(cafe6, now.plusHours(8), 5, 12_000, "이자카야 주방 보조 5시간",
+                JobRole.KITCHEN, SkillLevel.L1_TRAINEE);
+        Shift s11 = saveShift(cafe7, now.plusHours(2).plusMinutes(30), 5, 11_500, "BBQ 런치~오후 5시간 — 홀",
+                JobRole.HALL, SkillLevel.L1_TRAINEE);
+        Shift s12 = saveShift(cafe7, now.plusHours(8), 5, 12_000, "BBQ 저녁 피크 5시간 — 주방",
+                JobRole.KITCHEN, SkillLevel.L2_BASIC);
 
         // 사전 지원 (PENDING) — "이미 지원함" 상태 즉시 검증
-        // worker1 → s1, s4
+        // worker1 → s1, s4, s11(BBQ HALL)
         // worker2 → s1, s3
-        // worker3 → s4, s5
+        // worker3 → s4, s5, s10(이자카야 KITCHEN)
+        // worker4 → s7(WaBar BARTENDER) — Phase 2 매칭 검증
         applicationRepository.save(ShiftApplication.builder().shift(s1).worker(workers.get(0)).build());
         applicationRepository.save(ShiftApplication.builder().shift(s4).worker(workers.get(0)).build());
+        applicationRepository.save(ShiftApplication.builder().shift(s11).worker(workers.get(0)).build());
         applicationRepository.save(ShiftApplication.builder().shift(s1).worker(workers.get(1)).build());
         applicationRepository.save(ShiftApplication.builder().shift(s3).worker(workers.get(1)).build());
         applicationRepository.save(ShiftApplication.builder().shift(s4).worker(workers.get(2)).build());
         applicationRepository.save(ShiftApplication.builder().shift(s5).worker(workers.get(2)).build());
+        applicationRepository.save(ShiftApplication.builder().shift(s10).worker(workers.get(2)).build());
+        applicationRepository.save(ShiftApplication.builder().shift(s7).worker(workers.get(3)).build());
 
-        log.info("[SEED] done — 1 admin / 3 owners / 4 workers / 4 cafes / 6 OPEN shifts / 6 pending apps");
+        log.info("[SEED] done — 1 admin / 5 owners / 4 workers / 7 cafes / 12 OPEN shifts / 9 pending apps");
         log.info("[SEED] login: admin·owner1~5·worker1~4 (모두 비번 pw1234, owner4·5는 빈 점주)");
-        log.info("[SEED] 시나리오: worker1로 로그인 → 시프트 #1, #4는 '지원 대기' 표시 / #2, #3, #5, #6 만 지원 가능");
+        log.info("[SEED] Phase 2 시드: WaBar(s7,s8) / 이자카야(s9,s10) / BBQ(s11,s12) — 카테고리 필터(🍱🍺) 검증 가능");
     }
 
-    private Shift saveShift(Cafe cafe, LocalDateTime startAt, int hours, int wage, String desc) {
+    private Shift saveShift(Cafe cafe, LocalDateTime startAt, int hours, int wage, String desc,
+                            JobRole jobRole, SkillLevel minSkill) {
         return shiftRepository.save(Shift.builder()
                 .cafe(cafe)
                 .startAt(startAt)
@@ -171,6 +196,8 @@ public class DataSeeder implements CommandLineRunner {
                 .hourlyWage(wage)
                 .headcount(1)
                 .description(desc)
+                .jobRole(jobRole)
+                .minSkill(minSkill)
                 .build());
     }
 }

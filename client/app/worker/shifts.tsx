@@ -4,6 +4,7 @@ import { router } from 'expo-router';
 import { GradientButton } from '@/components/Gradient';
 import { Icon } from '@/components/Icon';
 import KakaoMapThumbnail from '@/components/KakaoMapThumbnail';
+import KakaoShiftsMap, { ShiftPin } from '@/components/KakaoShiftsMap';
 import ShiftSkillBadges from '@/components/ShiftSkillBadges';
 import { TrustScoreBadge } from '@/components/TrustScoreBadge';
 import { WorkerOnboardingTutorial } from '@/components/WorkerOnboardingTutorial';
@@ -111,6 +112,8 @@ export default function WorkerShiftsScreen() {
   const [sortMode, setSortMode] = useState<SortMode>('recommend');
   const [filtersLoaded, setFiltersLoaded] = useState(false);
   const [filtersExpanded, setFiltersExpanded] = useState(false);
+  // 지도/리스트 뷰 토글 — 같은 visibleShifts 데이터 공유, 표현만 다름
+  const [viewMode, setViewMode] = useState<'list' | 'map'>('list');
 
   // 워커 현재 위치 (GPS, best-effort)
   const [myCoords, setMyCoords] = useState<Coords | null>(null);
@@ -430,7 +433,7 @@ export default function WorkerShiftsScreen() {
       style={{ backgroundColor: colors.surfaceAlt }}
       contentContainerStyle={{ padding: spacing.lg, paddingBottom: 100 }}
       showsVerticalScrollIndicator={false}
-      data={visibleShifts}
+      data={viewMode === 'map' ? [] : visibleShifts}
       keyExtractor={(s) => String(s.id)}
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={load} tintColor={colors.primary} />}
       ListHeaderComponent={
@@ -500,8 +503,38 @@ export default function WorkerShiftsScreen() {
             </Pressable>
           ) : null}
 
+          {/* 뷰 모드 토글 — 리스트/지도 */}
+          <View style={{ marginTop: 14, flexDirection: 'row', gap: 6 }}>
+            {(['list', 'map'] as const).map((m) => {
+              const active = viewMode === m;
+              const label = m === 'list' ? '📋 리스트' : '🗺 지도';
+              return (
+                <Pressable
+                  key={m}
+                  onPress={() => setViewMode(m)}
+                  style={({ pressed }) => [
+                    {
+                      flex: 1,
+                      paddingVertical: 8,
+                      borderRadius: radius.md,
+                      backgroundColor: active ? colors.primary : colors.surface,
+                      borderWidth: 1.5,
+                      borderColor: active ? colors.primary : colors.border,
+                      alignItems: 'center',
+                    },
+                    pressed && { opacity: 0.85 },
+                  ]}
+                >
+                  <Text style={{ fontSize: 13, fontWeight: '800', color: active ? '#fff' : colors.text }}>
+                    {label}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+
           {/* 정렬 칩 */}
-          <View style={{ marginTop: 14, flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
+          <View style={{ marginTop: 10, flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
             {(['recommend', 'time', 'rating', 'wage', ...(myCoords ? ['distance' as SortMode] : [])] as SortMode[]).map((m) => {
               const active = sortMode === m;
               const label =
@@ -716,6 +749,32 @@ export default function WorkerShiftsScreen() {
         </View>
       }
       ListEmptyComponent={
+        viewMode === 'map' ? (
+          <View style={{ paddingHorizontal: spacing.lg, paddingBottom: spacing.lg }}>
+            <KakaoShiftsMap
+              pins={visibleShifts
+                .filter((s): s is WorkerShift & { cafeLatitude: number; cafeLongitude: number } =>
+                  s.cafeLatitude != null && s.cafeLongitude != null)
+                .map<ShiftPin>((s) => ({
+                  id: s.id,
+                  latitude: s.cafeLatitude,
+                  longitude: s.cafeLongitude,
+                  label: `${Math.round(s.hourlyWage / 1000)}k · ${s.cafeName}`,
+                  isFavorite: !!(favIds.has(s.cafeId) || s.isFavoriteCafe),
+                  favoritesOnlyUntil: s.favoritesOnlyUntil ?? null,
+                }))}
+              myCoords={myCoords}
+              onPinClick={(id) => {
+                const s = visibleShifts.find((x) => x.id === id);
+                if (s) router.push(`/cafe/${s.cafeId}` as never);
+              }}
+              height={520}
+            />
+            <Text style={{ fontSize: 11, color: colors.textMuted, marginTop: 10, textAlign: 'center' }}>
+              {visibleShifts.filter((s) => s.cafeLatitude != null).length}건 표시 · 마커 탭하면 매장 상세로 이동
+            </Text>
+          </View>
+        ) : (
         <View style={{ paddingTop: 40, paddingHorizontal: spacing.lg, alignItems: 'center' }}>
           <Text style={{ fontSize: 44, marginBottom: 10 }}>{fitOnly ? '🎯' : '🕐'}</Text>
           <Text style={[styles.bodyMuted, { fontSize: 14, fontWeight: '700' }]}>
@@ -803,6 +862,7 @@ export default function WorkerShiftsScreen() {
             </View>
           </View>
         </View>
+        )
       }
       renderItem={({ item }) => {
         const dur = durationHours(item.startAt, item.endAt);
@@ -815,6 +875,11 @@ export default function WorkerShiftsScreen() {
           ? distanceKm(myCoords, { latitude: item.cafeLatitude, longitude: item.cafeLongitude })
           : null;
         const reasons = sortMode === 'recommend' ? recommendReasons(item) : [];
+        // 단골 전용 우선 노출 — 본인이 단골이면 자동 보임. 비단골은 lockMinutes > 0 이면 잠금 뱃지 노출.
+        const lockedTill = item.favoritesOnlyUntil ? new Date(item.favoritesOnlyUntil) : null;
+        const lockMinutes = lockedTill && lockedTill.getTime() > Date.now()
+          ? Math.max(1, Math.round((lockedTill.getTime() - Date.now()) / 60000))
+          : 0;
 
         return (
           <View
@@ -889,6 +954,29 @@ export default function WorkerShiftsScreen() {
               </Pressable>
               <StatusPill status={myStatus} />
             </View>
+
+            {/* 단골 전용 우선 노출 — 백엔드 필터로 단골 워커에게만 보임. 황금 우선권 표시 */}
+            {lockMinutes > 0 ? (
+              <View
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  gap: 6,
+                  marginTop: 10,
+                  paddingHorizontal: 10,
+                  paddingVertical: 6,
+                  borderRadius: radius.md,
+                  backgroundColor: colors.warnSoft,
+                  borderWidth: 1,
+                  borderColor: colors.warn,
+                }}
+              >
+                <Text style={{ fontSize: 13 }}>⭐</Text>
+                <Text style={{ fontSize: 11, fontWeight: '800', color: colors.warn, flex: 1 }}>
+                  단골 우선권 — 비단골 워커에게는 {lockMinutes}분 후 공개
+                </Text>
+              </View>
+            ) : null}
 
             {reasons.length > 0 ? (
               <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 4, marginTop: 10, alignItems: 'center' }}>

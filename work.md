@@ -4,6 +4,83 @@
 
 ---
 
+## 2026-05-06 (22차) — A~F 일괄 (지도뷰·백엔드 거리정렬·단골 잠금뱃지·GPS UX·템플릿 수정)
+
+### 동기
+21차 audit 결과 위치 기반·GPS·단골/재고용·템플릿 모두 80% 완성, **남은 갭은 모두 UI/UX 보완**으로 판명. 한 라운드에 A~F 다 정리.
+
+### A — 지도뷰 화면
+- `client/components/KakaoShiftsMap.tsx` 신설 (다중 마커 지도) — 단일 iframe/WebView 안에서 핀 N개 + 워커 본인 위치 점 + LatLngBounds 자동 줌. 마커 클릭 → postMessage 브리지 → 부모 콜백
+- 핀 시각: 황금(단골)/회색(잠금=단골 전용 우선노출 중)/주황(일반). 라벨 "11k · 메가커피"
+- `client/app/worker/shifts.tsx` 정렬 칩 위에 📋 리스트/🗺 지도 토글 추가. 지도 모드 시 FlatList data=[] 로 빈 처리하고 ListEmptyComponent 에 KakaoShiftsMap 렌더 (520px). 마커 탭 → /cafe/[id] 이동
+
+### B — 백엔드 거리 정렬
+- `WorkerController.openShifts(...)` 에 옵션 query param `?sort=distance&lat=&lng=` 추가
+- Haversine 거리 계산 헬퍼 `haversineKm(lat1,lng1,lat2,lng2)` 신설
+- 좌표 없는 매장은 Double.MAX_VALUE 로 뒤로 밀기. lat/lng 없으면 정렬 스킵 (기본 동작 유지)
+
+### C — 단골 우선 시간 입력 UI
+- 이미 완성돼 있음 (new-shift.tsx 611-661 favoritesOnly 토글 + 분 선택 칩 + ShiftCreateRequest.favoritesOnlyMinutes + ShiftService.create 의 LocalDateTime.now().plusMinutes 변환). 검증만 통과.
+
+### D — 워커 시프트 카드 단골 잠금 뱃지
+- `WorkerShiftView` DTO 에 `favoritesOnlyUntil` 필드 추가 + from() 매퍼에 `s.getFavoritesOnlyUntil()` 매핑
+- 워커 카드: lockedTill > now 인 시프트는 황금 뱃지 "⭐ 단골 우선권 — 비단골 워커에게는 N분 후 공개" 표시 (백엔드가 비단골은 이미 필터링하므로 이 뱃지가 보이는 워커는 항상 단골)
+
+### E — GPS 체크인 UX 보완
+- `worker/matches.tsx` checkIn(): GPS 권한 거부/실패 시 silent catch → 명시적 confirm 다이얼로그 ("위치를 가져올 수 없어요. 좌표 없이 체크인할까요? 반경 검증이 비활성화됩니다") 노출
+- 사용자 취소 시 체크인 중단. 계속 선택 시 빈 body 로 진행 (백엔드는 좌표 미동봉이면 게이트 자동 스킵 — 기존 동작)
+
+### F — 시프트 템플릿 수정 기능
+- 백엔드: `OwnerController` `PUT /api/owner/shift-templates/{id}` 신설 + `ShiftTemplateService.update()` 신설 (소유자 검증 + 매장 변경 가능 검증)
+- `ShiftTemplate` 엔티티에 setter 11개 추가 (cafe·name·daysOfWeek·startHour·startMinute·durationHours·hourlyWage·headcount·description·jobRole·minSkill·requirements). active setter 는 이미 있었음
+- 클라: 템플릿 카드에 "수정" 버튼 추가 (지금 14일치 등록 / 수정 / 삭제 3버튼). CreateModal 에 `editing: Template | null` prop 추가, useEffect 로 visible+editing 변경 시 폼 prefill 또는 reset. PUT vs POST 분기 + 모달 타이틀/버튼 라벨 분기
+
+### 변경 파일
+- 서버: `dto/WorkerShiftView.java`, `controller/WorkerController.java`, `controller/OwnerController.java`, `service/ShiftTemplateService.java`, `domain/ShiftTemplate.java`
+- 클라: `components/KakaoShiftsMap.tsx` (신설), `app/worker/shifts.tsx`, `app/owner/shift-templates.tsx`, `app/worker/matches.tsx`
+
+### 검증
+- `mvn compile` 성공 (deprecation 경고 1건 — KakaoLocalService 기존 경고)
+- 서버 재시작 + 시드 재생성 (12 OPEN shifts / 9 pending apps)
+
+---
+
+## 2026-05-06 (21차) — 음식점·바 시프트 시드 추가 (Phase 2 카테고리 필터 검증)
+
+### 동기
+어제(20차) 워커 시프트 검색에 카테고리 필터(☕🥐🍱🍺) 만들었으나 시드는 카페·베이커리(s1~s6)만 있어 🍱🍺 필터 효과를 눈으로 못 봄. 가성비 최상 검증 작업.
+
+### DataSeeder 변경
+- `worker4` (L4_EXPERT) `capableRoles` 확장: BARTENDER/KITCHEN/CLOSING 추가 (기존 BARISTA/HALL/CASHIER) — Phase 2 매칭 시뮬용
+- `worker3` (L1_TRAINEE) 도 KITCHEN 추가 — 이자카야 주방 보조 매칭
+- `saveShift(...)` 헬퍼 시그니처 확장: `JobRole jobRole, SkillLevel minSkill` 추가. Phase 1 시프트 6개는 둘 다 null 로 호출(기존 동작 유지)
+- Phase 2 시프트 6개 신설:
+  - **s7 WaBar 저녁 5h ₩13,000 BARTENDER L2** (cafe5)
+  - **s8 WaBar 마감 4h ₩13,500 CLOSING L3** (cafe5)
+  - **s9 모루이자카야 저녁 5h ₩12,500 HALL L2** (cafe6)
+  - **s10 모루이자카야 주방 5h ₩12,000 KITCHEN L1** (cafe6)
+  - **s11 BBQ 런치 5h ₩11,500 HALL L1** (cafe7)
+  - **s12 BBQ 저녁 5h ₩12,000 KITCHEN L2** (cafe7)
+- 신규 PENDING 지원 3건: worker1→s11, worker3→s10, worker4→s7
+- 시드 로그 갱신: "1 admin / 5 owners / 4 workers / 7 cafes / 12 OPEN shifts / 9 pending apps"
+
+### application.yml 변경
+- `skima.seed.create-shifts-and-apps: false → true` — 시프트 시드 활성화
+- 주석도 동기화: "12+9건 (Phase 1 카페·베이커리 6 + Phase 2 음식점·바 6)"
+
+### 검증
+- `mvn clean compile` 성공
+- 서버 재기동 후 시드 로그 정상: `[SEED] Phase 2 시드: WaBar(s7,s8) / 이자카야(s9,s10) / BBQ(s11,s12) — 카테고리 필터(🍱🍺) 검증 가능`
+- `GET /api/owner/cafes` HTTP 401 (정상 — auth required)
+
+### 인증 전환 결정 (메모리 반영)
+사용자 결정: 카카오 native 로그인 폐기 → **전화번호(SMS OTP) 로그인 전환** 예정. SMS 제공자 추천: 알리고(8.5원/건). 본 라운드는 시드만, 인증 전환은 별도 라운드.
+
+### 다음 라운드 큐 (TaskList)
+2 Railway 클라이언트 배포 / 3 위치 기반 검색·지도뷰 / 4 EAS dev build (APK) / 5 GPS 출근 인증 / 6 단골/재고용 1탭
+
+---
+
 ## 2026-05-05 (14차) — 추천 점수 노출 + 분쟁 알림 + 분쟁 내역 화면 (D + G + F 일괄)
 
 ### 동기 (사용자 합의)

@@ -115,4 +115,21 @@ public class ShiftTemplate {
     public void setActive(Boolean active) {
         this.active = active;
     }
+
+    public void setCafe(Cafe cafe) { this.cafe = cafe; }
+    public void setName(String name) { this.name = name; }
+    public void setDaysOfWeek(Set<DayOfWeek> daysOfWeek) {
+        this.daysOfWeek = daysOfWeek == null ? new HashSet<>() : new HashSet<>(daysOfWeek);
+    }
+    public void setStartHour(Integer startHour) { this.startHour = startHour; }
+    public void setStartMinute(Integer startMinute) { this.startMinute = startMinute == null ? 0 : startMinute; }
+    public void setDurationHours(Double durationHours) { this.durationHours = durationHours; }
+    public void setHourlyWage(Integer hourlyWage) { this.hourlyWage = hourlyWage; }
+    public void setHeadcount(Integer headcount) { this.headcount = headcount == null ? 1 : headcount; }
+    public void setDescription(String description) { this.description = description; }
+    public void setJobRole(JobRole jobRole) { this.jobRole = jobRole; }
+    public void setMinSkill(SkillLevel minSkill) { this.minSkill = minSkill; }
+    public void setRequirements(Set<String> requirements) {
+        this.requirements = requirements == null ? new HashSet<>() : new HashSet<>(requirements);
+    }
 }

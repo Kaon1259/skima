@@ -45,7 +45,9 @@ public record WorkerShiftView(
         // 매장 신뢰도 점수 (null = 데이터 부족, 5건 미만)
         Integer cafeTrustScore,
         // 매장 사진 URL — 카드 헤더 썸네일. null 이면 브랜드 letter 폴백
-        String cafeImageUrl
+        String cafeImageUrl,
+        // 단골 우선 노출 종료 시각 — null/과거 = 모두 공개 / 미래 = 즐겨찾기한 워커에게만 우선 (해당 워커 본인은 보임, 안 한 워커는 필터링됨)
+        LocalDateTime favoritesOnlyUntil
 ) {
     public static WorkerShiftView from(Shift s, ApplicationStatus myStatus, BrandResponse brand,
                                        Double cafeAvgRating, Integer cafeRatingsCount, Double cafeNoShowRate,
@@ -78,7 +80,8 @@ public record WorkerShiftView(
                 s.getCafe().getLatitude(),
                 s.getCafe().getLongitude(),
                 cafeTrustScore,
-                s.getCafe().getImageUrl()
+                s.getCafe().getImageUrl(),
+                s.getFavoritesOnlyUntil()
         );
     }
 }

@@ -60,7 +60,7 @@ skima:
     payout-trigger-cron: "0 * * * * *"   # 매분 0초마다 정산 트리거 점검
   seed:
     refresh-on-start: true   # dev 기본값. 운영 전환 시 false 로 두고 Flyway 등으로 마이그레이션
-    create-shifts-and-apps: false   # true=시드 시프트/지원 6+6건 생성 / false=비워둠 (수동 테스트용)
+    create-shifts-and-apps: true    # true=시드 시프트/지원 12+9건 생성 (Phase 1 카페·베이커리 6 + Phase 2 음식점·바 6) / false=비워둠
   no-show:
     grace-minutes: 30        # 시프트 시작 후 30분까지 체크인 없으면 NO_SHOW + 백업 매칭
 

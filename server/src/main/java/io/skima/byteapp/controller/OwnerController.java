@@ -558,6 +558,14 @@ public class OwnerController {
                 shiftTemplateService.create(principal.getDomainUser(), req));
     }
 
+    @PutMapping("/shift-templates/{id}")
+    public io.skima.byteapp.dto.ShiftTemplateResponse updateTemplate(@AuthenticationPrincipal AuthUser principal,
+                                                                      @PathVariable Long id,
+                                                                      @Valid @RequestBody io.skima.byteapp.dto.ShiftTemplateRequest req) {
+        return io.skima.byteapp.dto.ShiftTemplateResponse.from(
+                shiftTemplateService.update(principal.getDomainUser(), id, req));
+    }
+
     @PostMapping("/shift-templates/{id}/active")
     public io.skima.byteapp.dto.ShiftTemplateResponse setTemplateActive(@AuthenticationPrincipal AuthUser principal,
                                                                          @PathVariable Long id,

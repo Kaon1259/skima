@@ -41,6 +41,7 @@ export default function ShiftTemplatesScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [initialLoaded, setInitialLoaded] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
+  const [editing, setEditing] = useState<Template | null>(null);
   const [busy, setBusy] = useState(false);
 
   const load = useCallback(async () => {
@@ -238,6 +239,15 @@ export default function ShiftTemplatesScreen() {
                 <Text style={{ color: '#fff', fontSize: 12, fontWeight: '800' }}>지금 14일치 등록</Text>
               </Pressable>
               <Pressable
+                onPress={() => { setEditing(item); setModalOpen(true); }}
+                style={({ pressed }) => [
+                  { paddingVertical: 10, paddingHorizontal: 14, borderRadius: radius.md, backgroundColor: colors.surfaceMuted, alignItems: 'center', borderWidth: 1, borderColor: colors.border },
+                  pressed && { opacity: 0.85 },
+                ]}
+              >
+                <Text style={{ color: colors.text, fontSize: 12, fontWeight: '800' }}>수정</Text>
+              </Pressable>
+              <Pressable
                 onPress={() => remove(item)}
                 style={({ pressed }) => [
                   { paddingVertical: 10, paddingHorizontal: 14, borderRadius: radius.md, backgroundColor: colors.dangerSoft, alignItems: 'center' },
@@ -255,13 +265,20 @@ export default function ShiftTemplatesScreen() {
         visible={modalOpen}
         cafes={cafes}
         busy={busy}
-        onClose={() => setModalOpen(false)}
+        editing={editing}
+        onClose={() => { setModalOpen(false); setEditing(null); }}
         onCreated={async (req) => {
           setBusy(true);
           try {
-            await api('/api/owner/shift-templates', { method: 'POST', body: req });
-            toast.push({ title: '✅ 템플릿 추가 완료', subtitle: '내일 자정 cron 부터 자동 등록 시작', severity: 'success' });
+            if (editing) {
+              await api(`/api/owner/shift-templates/${editing.id}`, { method: 'PUT', body: req });
+              toast.push({ title: '✅ 템플릿 수정 완료', subtitle: '다음 자동 생성부터 새 설정 적용', severity: 'success' });
+            } else {
+              await api('/api/owner/shift-templates', { method: 'POST', body: req });
+              toast.push({ title: '✅ 템플릿 추가 완료', subtitle: '내일 자정 cron 부터 자동 등록 시작', severity: 'success' });
+            }
             setModalOpen(false);
+            setEditing(null);
             await load();
           } catch (e) {
             notify((e as Error).message);
@@ -275,11 +292,12 @@ export default function ShiftTemplatesScreen() {
 }
 
 function CreateModal({
-  visible, cafes, busy, onClose, onCreated,
+  visible, cafes, busy, editing, onClose, onCreated,
 }: {
   visible: boolean;
   cafes: Cafe[];
   busy: boolean;
+  editing: Template | null;
   onClose: () => void;
   onCreated: (req: any) => void;
 }) {
@@ -295,6 +313,38 @@ function CreateModal({
   const [jobRole, setJobRole] = useState<JobRole | null>('BARISTA');
   const [minSkill, setMinSkill] = useState<SkillLevel>('L2_BASIC');
   const [requirements, setRequirements] = useState<Set<string>>(new Set());
+
+  // 모달이 열릴 때 editing 값으로 폼 prefill — null 이면 신규 작성용 디폴트 유지
+  useEffect(() => {
+    if (!visible) return;
+    if (editing) {
+      setCafeId(editing.cafeId);
+      setName(editing.name ?? '');
+      setDows(new Set(editing.daysOfWeek));
+      setStartHour(String(editing.startHour));
+      setStartMinute(String(editing.startMinute));
+      setDuration(String(editing.durationHours));
+      setWage(String(editing.hourlyWage));
+      setHeadcount(String(editing.headcount));
+      setDescription(editing.description ?? '');
+      setJobRole(editing.jobRole ?? null);
+      setMinSkill(editing.minSkill ?? 'L2_BASIC');
+      setRequirements(new Set(editing.requirements));
+    } else {
+      // 신규: 디폴트로 reset (다른 템플릿 수정 후 신규 모달 열 때 잔존 방지)
+      setName('');
+      setDows(new Set(['MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY']));
+      setStartHour('9');
+      setStartMinute('0');
+      setDuration('4');
+      setWage('11000');
+      setHeadcount('1');
+      setDescription('주간 반복');
+      setJobRole('BARISTA');
+      setMinSkill('L2_BASIC');
+      setRequirements(new Set());
+    }
+  }, [visible, editing]);
 
   useEffect(() => {
     if (cafes.length > 0 && cafeId == null) setCafeId(cafes[0].id);
@@ -341,8 +391,12 @@ function CreateModal({
       <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', alignItems: 'center', justifyContent: 'center', padding: spacing.lg }}>
         <View style={{ backgroundColor: colors.surface, borderRadius: radius.lg, padding: spacing.xl, width: '100%', maxWidth: 460, maxHeight: '90%' }}>
           <ScrollView showsVerticalScrollIndicator={false}>
-            <Text style={[styles.h2, { fontSize: 18, marginBottom: 4 }]}>새 시프트 템플릿</Text>
-            <Text style={[styles.subtitle, { marginBottom: 16 }]}>매주 X요일 자동 반복 등록</Text>
+            <Text style={[styles.h2, { fontSize: 18, marginBottom: 4 }]}>
+              {editing ? '템플릿 수정' : '새 시프트 템플릿'}
+            </Text>
+            <Text style={[styles.subtitle, { marginBottom: 16 }]}>
+              {editing ? '변경된 설정은 다음 자동 생성부터 적용' : '매주 X요일 자동 반복 등록'}
+            </Text>
 
             <Text style={{ fontSize: 12, fontWeight: '700', color: colors.textMuted, marginBottom: 4 }}>📍 매장</Text>
             <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 12 }}>
@@ -508,7 +562,7 @@ function CreateModal({
                 <Text style={styles.buttonSecondaryText}>취소</Text>
               </Pressable>
               <Pressable style={[styles.buttonPrimary, { flex: 1 }, busy && { opacity: 0.7 }]} onPress={submit} disabled={busy}>
-                <Text style={styles.buttonPrimaryText}>{busy ? '저장 중...' : '템플릿 저장'}</Text>
+                <Text style={styles.buttonPrimaryText}>{busy ? '저장 중...' : (editing ? '수정 저장' : '템플릿 저장')}</Text>
               </Pressable>
             </View>
           </ScrollView>

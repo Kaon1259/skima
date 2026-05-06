@@ -69,6 +69,43 @@ public class ShiftTemplateService {
     }
 
     @Transactional
+    public ShiftTemplate update(User owner, Long id, ShiftTemplateRequest req) {
+        var t = templateRepository.findById(id)
+                .orElseThrow(() -> BusinessException.notFound("템플릿을 찾을 수 없습니다"));
+        if (!t.getOwner().getId().equals(owner.getId())) {
+            throw BusinessException.forbidden("본인 템플릿만 수정 가능");
+        }
+        if (req.daysOfWeek() == null || req.daysOfWeek().isEmpty()) {
+            throw BusinessException.badRequest("요일을 1개 이상 선택해주세요");
+        }
+        if (req.durationHours() == null || req.durationHours() <= 0) {
+            throw BusinessException.badRequest("근무 시간은 양수여야 합니다");
+        }
+        // 매장 변경 가능 — 본인 매장이어야 함
+        if (req.cafeId() != null && !req.cafeId().equals(t.getCafe().getId())) {
+            var newCafe = cafeRepository.findById(req.cafeId())
+                    .orElseThrow(() -> BusinessException.notFound("매장을 찾을 수 없습니다"));
+            if (!newCafe.getOwner().getId().equals(owner.getId())) {
+                throw BusinessException.forbidden("본인 소유 매장이 아닙니다");
+            }
+            t.setCafe(newCafe);
+        }
+        t.setName(req.name());
+        t.setDaysOfWeek(req.daysOfWeek());
+        t.setStartHour(req.startHour());
+        t.setStartMinute(req.startMinute() == null ? 0 : req.startMinute());
+        t.setDurationHours(req.durationHours());
+        t.setHourlyWage(req.hourlyWage());
+        t.setHeadcount(req.headcount() == null ? 1 : req.headcount());
+        t.setDescription(req.description());
+        t.setJobRole(req.jobRole());
+        t.setMinSkill(req.minSkill());
+        t.setRequirements(req.requirements());
+        if (req.active() != null) t.setActive(req.active());
+        return t;
+    }
+
+    @Transactional
     public ShiftTemplate setActive(User owner, Long id, boolean active) {
         var t = templateRepository.findById(id)
                 .orElseThrow(() -> BusinessException.notFound("템플릿을 찾을 수 없습니다"));
